@@ -1,0 +1,23 @@
+Source: xwax
+Section: sound
+Priority: extra
+Maintainer: Mitchell Smith <mjs@mjsprojects.net>
+Build-Depends: debhelper (>= 7), libasound2-dev, libsdl-ttf2.0-dev
+Standards-Version: 3.8.3
+Homepage: http://www.xwax.co.uk/
+
+Package: xwax
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: cdparanoia, faad, flac, mpg123, vorbis-tools
+Suggests: ffmpeg, sox
+Description: open-source vinyl emulation software for Linux
+ xwax is open-source vinyl emulation software for Linux. It allows DJs and 
+ turntablists to playback digital audio files (MP3, Ogg Vorbis, FLAC, AAC and 
+ more), controlled using a normal pair of turntables via timecoded vinyls.
+ .
+ It's designed for both beat mixing and scratch mixing. Needle drops, pitch 
+ changes, scratching, spinbacks and rewinds are all supported, and feel just 
+ like the audio is pressed onto the vinyl itself.
+ .
+ The focus is on an accurate vinyl feel which is efficient, stable and fast.

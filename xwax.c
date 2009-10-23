@@ -44,8 +44,8 @@
 
 #define DEFAULT_RATE 44100
 
-#define DEFAULT_IMPORTER "xwax_import"
-#define DEFAULT_SCANNER "xwax_scan"
+#define DEFAULT_IMPORTER "/usr/lib/xwax/xwax_import"
+#define DEFAULT_SCANNER "/usr/lib/xwax/xwax_scan"
 #define DEFAULT_TIMECODE "serato_2a"
 
 

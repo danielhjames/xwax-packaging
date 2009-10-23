@@ -15,6 +15,10 @@
 # MA 02110-1301, USA.
 #
 
+PREFIX=/usr
+BINDIR=$(PREFIX)/bin
+LIBDIR=$(PREFIX)/lib/xwax
+
 CFLAGS += -Wall -O3 -MMD
 LDFLAGS += -O3
 
@@ -60,6 +64,13 @@ xwax:		LDFLAGS += -pthread
 interface.o:	CFLAGS += $(SDL_CFLAGS)
 
 xwax.o:		CFLAGS += $(DEVICE_CPPFLAGS)
+
+install: xwax xwax_import xwax_scan
+	mkdir -p $(BINDIR)
+	install xwax $(BINDIR)/xwax
+	mkdir -p $(LIBDIR)
+	install xwax_import $(LIBDIR)/xwax_import
+	install xwax_scan $(LIBDIR)/xwax_scan
 
 clean:
 		rm -f xwax *.o *.d *~
