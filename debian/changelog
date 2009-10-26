@@ -1,3 +1,9 @@
+xwax (0.6-3) unstable; urgency=low
+
+  * Correction of license details, should be GPL version 2 only
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Mon, 26 Oct 2009 10:40:27 +1000
+
 xwax (0.6-2) unstable; urgency=low
 
   * Using mpg123 instead of mpg321
