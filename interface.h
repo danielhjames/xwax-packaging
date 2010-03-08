@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -21,18 +21,17 @@
 #define INTERFACE_H
 
 #include "timecoder.h"
+#include "library.h"
 
 #define MAX_PLAYERS 4
 #define MAX_TIMECODERS 4
-
-struct interface_local_t;
 
 struct interface_t {
     short int players, timecoders;
     
     struct player_t *player[MAX_PLAYERS];
     struct timecoder_t *timecoder[MAX_TIMECODERS];
-    struct listing_t *listing;
+    struct library_t *library;
 };
 
 void interface_init(struct interface_t *in);

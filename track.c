@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,6 +17,7 @@
  *
  */
 
+#define _BSD_SOURCE /* vfork() */
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -68,7 +69,7 @@ static int start_import(struct track_t *tr, const char *path)
         }
         if(dup2(pstdout[1], STDOUT_FILENO) == -1) {
             perror("dup2");
-            exit(-1);
+            _exit(EXIT_FAILURE); /* vfork() was used */
         }
         if(close(pstdout[1]) != 0) {
             perror("close");
@@ -77,7 +78,8 @@ static int start_import(struct track_t *tr, const char *path)
 
         if(execl(tr->importer, "import", path, NULL) == -1) {
             perror("execl");
-            exit(-1);
+            fprintf(stderr, "Failed to launch importer %s\n", tr->importer);
+            _exit(EXIT_FAILURE); /* vfork() was used */
         }
 
         abort(); /* execl() never returns */
@@ -205,7 +207,7 @@ static int read_from_pipe(struct track_t *tr)
         ls = s % TRACK_BLOCK_SAMPLES;
         
         v = (abs(block->pcm[ls * TRACK_CHANNELS])
-             + abs(block->pcm[ls * TRACK_CHANNELS]));
+             + abs(block->pcm[ls * TRACK_CHANNELS + 1]));
 
         /* PPM-style fast meter approximation */
 

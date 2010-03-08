@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -22,12 +22,13 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <SDL.h> /* may override main() */
+
 #include "alsa.h"
 #include "device.h"
 #include "interface.h"
 #include "jack.h"
 #include "library.h"
-#include "listing.h"
 #include "oss.h"
 #include "player.h"
 #include "rig.h"
@@ -44,8 +45,8 @@
 
 #define DEFAULT_RATE 44100
 
-#define DEFAULT_IMPORTER "/usr/lib/xwax/xwax_import"
-#define DEFAULT_SCANNER "/usr/lib/xwax/xwax_scan"
+#define DEFAULT_IMPORTER EXECDIR "/xwax-import"
+#define DEFAULT_SCANNER EXECDIR "/xwax-scan"
 #define DEFAULT_TIMECODE "serato_2a"
 
 
@@ -100,20 +101,22 @@ static void connect_deck_to_rig(struct rig_t *rig, int n, struct deck_t *deck)
 
 void usage(FILE *fd)
 {
-    fprintf(fd, "Usage: xwax [<parameters>]\n\n"
+    fprintf(fd, "Usage: xwax [<options>]\n\n"
       "  -l <directory> Directory to scan for audio tracks\n"
       "  -t <name>      Timecode name\n"
-      "  -i <program>   Specify external importer (default '%s')\n"
-      "  -s <program>   Specify external library scanner (default '%s')\n"
+      "  -i <program>   Importer (default '%s')\n"
+      "  -s <program>   Library scanner (default '%s')\n"
       "  -h             Display this message\n\n",
       DEFAULT_IMPORTER, DEFAULT_SCANNER);
 
+#ifdef WITH_OSS
     fprintf(fd, "OSS device options:\n"
       "  -d <device>    Build a deck connected to OSS audio device\n"
       "  -r <hz>        Sample rate (default %dHz)\n"
       "  -b <n>         Number of buffers (default %d)\n"
       "  -f <n>         Buffer size to request (2^n bytes, default %d)\n\n",
       DEFAULT_RATE, DEFAULT_OSS_BUFFERS, DEFAULT_OSS_FRAGMENT);
+#endif
 
 #ifdef WITH_ALSA
     fprintf(fd, "ALSA device options:\n"
@@ -133,21 +136,7 @@ void usage(FILE *fd)
       "Decks and audio directories can be specified multiple times.\n\n"
       "Available timecodes (for use with -t):\n"
       "  serato_2a (default), serato_2b, serato_cd,\n"
-      "  traktor_a, traktor_b, mixvibes_v2, mixvibes_7inch\n\n"
-      "eg. Standard 2-deck setup\n"
-      "  xwax -l ~/music -d /dev/dsp -d /dev/dsp1\n\n"
-      "eg. Use a larger buffer on a third deck\n"
-      "  xwax -l ~/music -d /dev/dsp -d /dev/dsp1 -f 10 -d /dev/dsp2\n\n");
-
-#ifdef WITH_ALSA
-    fprintf(fd, "eg. Use OSS and ALSA devices simultaneously\n"
-            "  xwax -l ~/music -d /dev/dsp -a hw:1\n\n");
-#endif
-
-#ifdef WITH_JACK
-    fprintf(fd, "eg. Use OSS and JACK devices simultaneously\n"
-            "  xwax -l ~/music -d /dev/dsp -j deck0\n\n");
-#endif
+      "  traktor_a, traktor_b, mixvibes_v2, mixvibes_7inch\n\n");
 }
 
 
@@ -160,7 +149,6 @@ int main(int argc, char *argv[])
     struct rig_t rig;
     struct interface_t iface;
     struct library_t library;
-    struct listing_t listing;
     struct device_t *device;
     
     fprintf(stderr, BANNER "\n\n" NOTICE "\n\n");
@@ -185,7 +173,12 @@ int main(int argc, char *argv[])
     
     while(argc > 0) {
 
-        if(!strcmp(argv[0], "-f")) {
+        if(!strcmp(argv[0], "-h")) {
+            usage(stdout);
+            return 0;
+
+#ifdef WITH_OSS
+        } else if(!strcmp(argv[0], "-f")) {
 
             /* Set fragment size for subsequent devices */
             
@@ -229,6 +222,7 @@ int main(int argc, char *argv[])
             
             argv += 2;
             argc -= 2;
+#endif
             
         } else if(!strcmp(argv[0], "-r")) {
 
@@ -296,9 +290,11 @@ int main(int argc, char *argv[])
 
             switch(argv[0][1]) {
 
+#ifdef WITH_OSS
             case 'd':
                 r = oss_init(device, argv[1], rate, oss_buffers, oss_fragment);
                 break;
+#endif
 #ifdef WITH_ALSA
             case 'a':
                 r = alsa_init(device, argv[1], rate, alsa_buffer);
@@ -389,14 +385,10 @@ int main(int argc, char *argv[])
             /* Load in a music library */
 
             if(library_import(&library, scanner, argv[1]) == -1)
-		return -1;
+                return -1;
 
             argv += 2;
             argc -= 2;
-
-        } else if(!strcmp(argv[0], "-h")) {
-            usage(stdout);
-            return 0;
 
         } else {
             fprintf(stderr, "'%s' argument is unknown; try -h.\n", argv[0]);
@@ -418,19 +410,13 @@ int main(int argc, char *argv[])
 
     for(n = 0; n < decks; n++)
         player_connect_timecoder(&deck[n].player, &deck[n].timecoder);
-    
-    fprintf(stderr, "Indexing music library...\n");
-    listing_init(&listing);
-    if(listing_add_library(&listing, &library) == -1)
-        return -1;
-    listing_sort(&listing);
-    iface.listing = &listing;
-    
+
     fprintf(stderr, "Starting threads...\n");
     if(rig_start(&rig) == -1)
         return -1;
 
     fprintf(stderr, "Entering interface...\n");
+    iface.library = &library;
     interface_run(&iface);
     
     fprintf(stderr, "Exiting cleanly...\n");
@@ -442,7 +428,6 @@ int main(int argc, char *argv[])
         deck_clear(&deck[n]);
     
     timecoder_free_lookup();
-    listing_clear(&listing);
     library_clear(&library);
     
     fprintf(stderr, "Done.\n");

@@ -1,3 +1,16 @@
+xwax (0.7-2) unstable; urgency=low
+
+  * Removed man page, now included in upstream release
+  * Verified build with binutils-gold (Closes: #556764)
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Mon, 08 Mar 2010 00:48:01 +0000
+
+xwax (0.7-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Mon, 01 Mar 2010 08:49:31 +1000
+
 xwax (0.6-3) unstable; urgency=low
 
   * Correction of license details, should be GPL version 2 only
@@ -19,15 +32,8 @@ xwax (0.6-1) unstable; urgency=low
 
  -- Mitchell Smith <mjs@mjsprojects.net>  Sat, 12 Sep 2009 06:31:22 +0000
 
-xwax (0.5-2) unstable; urgency=low
-
-  * Removed call to deprecated 'dh_clean -k' command in favor of 'dh_prep'
-
- -- Mitchell Smith <mjs@mjsprojects.net>  Thu, 16 Jul 2009 22:22:17 +0000
-
 xwax (0.5-1) unstable; urgency=low
 
   * Initial release (Closes: #535031)
 
  -- Mitchell Smith <mjs@mjsprojects.net>  Sun, 05 Jul 2009 21:57:19 +0000
-
