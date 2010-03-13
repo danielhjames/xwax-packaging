@@ -1,3 +1,10 @@
+xwax (0.7-3) unstable; urgency=low
+
+  * Fixes to debian/rules (Closes: #573552)
+  * Cleaned up a couple of Lintian warnings
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Sun, 14 Mar 2010 07:15:30 +1000
+
 xwax (0.7-2) unstable; urgency=low
 
   * Removed man page, now included in upstream release

@@ -88,7 +88,6 @@ install:
 		$(INSTALL) -m 0644 xwax.1 $(MANDIR)/man1/xwax.1
 		$(INSTALL) -d $(DOCDIR)/xwax
 		$(INSTALL) -m 0644 CHANGES $(DOCDIR)/xwax/CHANGES
-		$(INSTALL) -m 0644 COPYING $(DOCDIR)/xwax/COPYING
 		$(INSTALL) -m 0644 README $(DOCDIR)/xwax/README
 
 

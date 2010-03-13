@@ -3,7 +3,7 @@ Section: sound
 Priority: extra
 Maintainer: Mitchell Smith <mjs@mjsprojects.net>
 Build-Depends: debhelper (>= 7), libasound2-dev, libsdl-ttf2.0-dev
-Standards-Version: 3.8.3
+Standards-Version: 3.8.4
 Homepage: http://www.xwax.co.uk/
 
 Package: xwax
