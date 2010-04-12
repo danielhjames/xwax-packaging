@@ -1,3 +1,10 @@
+xwax (0.7-4) unstable; urgency=low
+
+  * Fixed kfreebsd build issue with help from Petr Salinger (Closes: #573809)
+  * Fixed problem with the way configure was being called as reported by upstream author
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Mon, 12 Apr 2010 10:08:52 +1000
+
 xwax (0.7-3) unstable; urgency=low
 
   * Fixes to debian/rules (Closes: #573552)

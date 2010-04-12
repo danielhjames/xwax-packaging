@@ -25,13 +25,11 @@ endif
 config.status: configure
 	dh_testdir
 	# Add here commands to configure the package.
-ifneq "$(wildcard /usr/share/misc/config.sub)" ""
-	cp -f /usr/share/misc/config.sub config.sub
+ifeq ($(DEB_HOST_ARCH_OS),kfreebsd)
+	 ./configure --prefix /usr --enable-oss
+else
+	 ./configure --prefix /usr --enable-alsa
 endif
-ifneq "$(wildcard /usr/share/misc/config.guess)" ""
-	cp -f /usr/share/misc/config.guess config.guess
-endif
-	./configure $(CROSS) --prefix /usr --enable-alsa CFLAGS="$(CFLAGS)" LDFLAGS="-Wl,-z,defs"
 
 build: build-stamp
 
