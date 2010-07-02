@@ -8,7 +8,7 @@ Homepage: http://www.xwax.co.uk/
 
 Package: xwax
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, ttf-dejavu-extra
 Recommends: cdparanoia, faad, flac, mpg123, vorbis-tools
 Suggests: ffmpeg, sox
 Description: open-source vinyl emulation software for Linux

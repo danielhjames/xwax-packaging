@@ -1,3 +1,10 @@
+xwax (0.7-5) unstable; urgency=low
+
+  * Added dependency on ttf-dejavu-extra which provides 
+    DejaVuSans-Oblique.ttf (Closes: #587569)
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Fri, 02 Jul 2010 12:08:00 +1000
+
 xwax (0.7-4) unstable; urgency=low
 
   * Fixed kfreebsd build issue with help from Petr Salinger (Closes: #573809)
