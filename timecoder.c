@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -49,7 +49,7 @@
 #define SWITCH_POLARITY 0x4 /* read bit values in negative (not positive) */
 
 
-struct timecode_def_t timecode_def[] = {
+static struct timecode_def_t timecode_def[] = {
     {
         .name = "serato_2a",
         .desc = "Serato 2nd Ed., side A",
@@ -124,7 +124,7 @@ struct timecode_def_t timecode_def[] = {
     },
     {
         .name = "mixvibes_7inch",
-        .desc = "MixVibes V2",
+        .desc = "MixVibes 7\"",
         .resolution = 1300,
         .flags = SWITCH_PHASE,
         .bits = 20,
@@ -187,8 +187,8 @@ static struct timecode_def_t* find_definition(const char *name)
     struct timecode_def_t *def;
 
     def = &timecode_def[0];
-    while(def->name) {
-        if(!strcmp(def->name, name))
+    while (def->name) {
+        if (!strcmp(def->name, name))
             return def;
         def++;
     }
@@ -203,18 +203,18 @@ static int build_lookup(struct timecode_def_t *def)
     unsigned int n;
     bits_t current, last;
 
-    if(def->lookup)
+    if (def->lookup)
         return 0;
 
     fprintf(stderr, "Building LUT for %d bit %dHz timecode (%s)\n",
             def->bits, def->resolution, def->desc);
 
-    if(lut_init(&def->lut, def->length) == -1)
+    if (lut_init(&def->lut, def->length) == -1)
 	return -1;
 
     current = def->seed;
     
-    for(n = 0; n < def->length; n++) {
+    for (n = 0; n < def->length; n++) {
         /* timecode must not wrap */
         assert(lut_lookup(&def->lut, current) == (unsigned)-1);
         lut_push(&def->lut, current);
@@ -235,8 +235,8 @@ void timecoder_free_lookup(void) {
     struct timecode_def_t *def;
 
     def = &timecode_def[0];
-    while(def->name) {
-        if(def->lookup)
+    while (def->name) {
+        if (def->lookup)
             lut_clear(&def->lut);
         def++;
     }
@@ -250,9 +250,9 @@ static void init_channel(struct timecoder_channel_t *ch)
 }
 
 
-/* Initialise a timecode decoder */
+/* Initialise a timecode decoder at the given reference speed */
 
-int timecoder_init(struct timecoder_t *tc, const char *def_name,
+int timecoder_init(struct timecoder_t *tc, const char *def_name, double speed,
 		   unsigned int sample_rate)
 {
     /* A definition contains a lookup table which can be shared
@@ -263,8 +263,9 @@ int timecoder_init(struct timecoder_t *tc, const char *def_name,
         fprintf(stderr, "Timecode definition '%s' is not known.\n", def_name);
         return -1;
     }
-    if(build_lookup(tc->def) == -1)
+    if (build_lookup(tc->def) == -1)
         return -1;
+    tc->speed = speed;
 
     tc->dt = 1.0 / sample_rate;
     tc->zero_alpha = tc->dt / (ZERO_RC + tc->dt);
@@ -316,7 +317,7 @@ int timecoder_monitor_init(struct timecoder_t *tc, int size)
 
 void timecoder_monitor_clear(struct timecoder_t *tc)
 {
-    if(tc->mon) {
+    if (tc->mon) {
         free(tc->mon);
         tc->mon = NULL;
     }
@@ -329,11 +330,11 @@ static void detect_zero_crossing(struct timecoder_channel_t *ch,
     ch->crossing_ticker++;
 
     ch->swapped = 0;
-    if(v > ch->zero + ZERO_THRESHOLD && !ch->positive) {
+    if (v > ch->zero + ZERO_THRESHOLD && !ch->positive) {
         ch->swapped = 1;
         ch->positive = 1;
         ch->crossing_ticker = 0;
-    } else if(v < ch->zero - ZERO_THRESHOLD && ch->positive) {
+    } else if (v < ch->zero - ZERO_THRESHOLD && ch->positive) {
         ch->swapped = 1;
         ch->positive = 0;
         ch->crossing_ticker = 0;
@@ -350,14 +351,14 @@ static void update_monitor(struct timecoder_t *tc, signed int x, signed int y)
     int px, py, p;
     float v, w;
 
-    if(!tc->mon)
+    if (!tc->mon)
         return;
 
     /* Decay the pixels already in the montior */
         
-    if(++tc->mon_counter % MONITOR_DECAY_EVERY == 0) {
-        for(p = 0; p < SQ(tc->mon_size); p++) {
-            if(tc->mon[p])
+    if (++tc->mon_counter % MONITOR_DECAY_EVERY == 0) {
+        for (p = 0; p < SQ(tc->mon_size); p++) {
+            if (tc->mon[p])
                 tc->mon[p] = tc->mon[p] * 7 / 8;
         }
     }
@@ -370,7 +371,7 @@ static void update_monitor(struct timecoder_t *tc, signed int x, signed int y)
 
     /* Set the pixel value to white */
             
-    if(px > 0 && px < tc->mon_size && py > 0 && py < tc->mon_size)
+    if (px > 0 && px < tc->mon_size && py > 0 && py < tc->mon_size)
         tc->mon[py * tc->mon_size + px] = 0xff;
 }
 
@@ -389,7 +390,7 @@ static void process_bitstream(struct timecoder_t *tc, signed int m)
     /* tc->bitstream is always in the order it is physically placed on
      * the vinyl, regardless of the direction. */
 
-    if(tc->forwards) {
+    if (tc->forwards) {
 	tc->timecode = fwd(tc->timecode, tc->def);
 	tc->bitstream = (tc->bitstream >> 1)
 	    + (b << (tc->def->bits - 1));
@@ -402,7 +403,7 @@ static void process_bitstream(struct timecoder_t *tc, signed int m)
 	tc->bitstream = ((tc->bitstream << 1) & mask) + b;
     }
 
-    if(tc->timecode == tc->bitstream)
+    if (tc->timecode == tc->bitstream)
 	tc->valid_counter++;
     else {
 	tc->timecode = tc->bitstream;
@@ -444,20 +445,20 @@ static void process_sample(struct timecoder_t *tc,
     /* If an axis has been crossed, use the direction of the crossing
      * to work out the direction of the vinyl */
 
-    if(tc->primary.swapped) {
+    if (tc->primary.swapped) {
 	tc->forwards = (tc->primary.positive != tc->secondary.positive);
-	if(tc->def->flags & SWITCH_PHASE)
+	if (tc->def->flags & SWITCH_PHASE)
 	    tc->forwards = !tc->forwards;
-    } if(tc->secondary.swapped) {
+    } if (tc->secondary.swapped) {
 	tc->forwards = (tc->primary.positive == tc->secondary.positive);
-	if(tc->def->flags & SWITCH_PHASE)
+	if (tc->def->flags & SWITCH_PHASE)
 	    tc->forwards = !tc->forwards;
     }
 
     /* If any axis has been crossed, register movement using the pitch
      * counters */
 
-    if(!tc->primary.swapped && !tc->secondary.swapped)
+    if (!tc->primary.swapped && !tc->secondary.swapped)
 	pitch_dt_observation(&tc->pitch, 0.0);
     else {
 	float dx;
@@ -471,7 +472,7 @@ static void process_sample(struct timecoder_t *tc,
     /* If we have crossed the primary channel in the right polarity,
      * it's time to read off a timecode 0 or 1 value */
 
-    if(tc->secondary.swapped &&
+    if (tc->secondary.swapped &&
        tc->primary.positive == ((tc->def->flags & SWITCH_POLARITY) == 0))
     {
 	process_bitstream(tc, m);
@@ -513,11 +514,11 @@ signed int timecoder_get_position(struct timecoder_t *tc, float *when)
 {
     signed int r;
 
-    if(tc->valid_counter > VALID_BITS) {
+    if (tc->valid_counter > VALID_BITS) {
         r = lut_lookup(&tc->def->lut, tc->bitstream);
 
-        if(r >= 0) {
-            if(when) 
+        if (r >= 0) {
+            if (when)
                 *when = tc->timecode_ticker * tc->dt;
             return r;
         }

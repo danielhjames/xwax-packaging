@@ -17,26 +17,37 @@
  *
  */
 
-#ifndef LUT_H
-#define LUT_H
+#include <stdio.h>
 
-typedef unsigned int slot_no_t;
+#include "library.h"
 
-struct slot_t {
-    unsigned int timecode;
-    slot_no_t next; /* next slot with the same hash */
-};
+/*
+ * Manual test of the record library. Mainly for use with
+ * valgrind to check for memory bugs etc.
+ */
 
-struct lut_t {
-    struct slot_t *slot;
-    slot_no_t *table, /* hash -> slot lookup */
-        avail; /* next available slot */
-};
+int main(int argc, char *argv[])
+{
+    const char *scan;
+    size_t n;
+    struct library_t lib;
 
-int lut_init(struct lut_t *lut, int nslots);
-void lut_clear(struct lut_t *lut);
+    if (argc < 3) {
+        fprintf(stderr, "usage: %s <scan> <path> [...]\n", argv[0]);
+        return -1;
+    }
 
-void lut_push(struct lut_t *lut, unsigned int timecode);
-unsigned int lut_lookup(struct lut_t *lut, unsigned int timecode);
+    scan = argv[1];
 
-#endif
+    if (library_init(&lib) == -1)
+        return -1;
+
+    for (n = 2; n < argc; n++) {
+        if (library_import(&lib, true, scan, argv[n]) == -1)
+            return -1;
+    }
+
+    library_clear(&lib);
+
+    return 0;
+}

@@ -3,7 +3,7 @@ xwax for Debian
 
 This package differs from the upstream release in the following ways:
 
-*  The xwax_import and xwax_scan scripts are located in /usr/lib/xwax to conform with the Debian filesystem hierarchy.
+*  The xwax_import and xwax_scan scripts are located in /usr/share/xwax to conform with the Debian filesystem hierarchy.
 
 Please consult the xwax homepage (www.xwax.co.uk) for further information on suggested hardware configuration.
 

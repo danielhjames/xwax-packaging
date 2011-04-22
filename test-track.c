@@ -17,26 +17,46 @@
  *
  */
 
-#ifndef LUT_H
-#define LUT_H
+#include <stdio.h>
+#include <sys/poll.h>
 
-typedef unsigned int slot_no_t;
+#include "track.h"
 
-struct slot_t {
-    unsigned int timecode;
-    slot_no_t next; /* next slot with the same hash */
-};
+/*
+ * Self-contained manual test of a track import operation
+ */
 
-struct lut_t {
-    struct slot_t *slot;
-    slot_no_t *table, /* hash -> slot lookup */
-        avail; /* next available slot */
-};
+int main(int argc, char *argv[])
+{
+    struct pollfd pe;
+    struct track_t track;
 
-int lut_init(struct lut_t *lut, int nslots);
-void lut_clear(struct lut_t *lut);
+    if (argc != 3) {
+        fprintf(stderr, "usage: %s <command> <path>\n", argv[0]);
+        return -1;
+    }
 
-void lut_push(struct lut_t *lut, unsigned int timecode);
-unsigned int lut_lookup(struct lut_t *lut, unsigned int timecode);
+    track_init(&track, argv[1]);
 
-#endif
+    if (track_import(&track, argv[2]) == -1)
+        return -1;
+
+    for (;;) {
+        ssize_t nfds;
+
+        nfds = track_pollfd(&track, &pe);
+        if (nfds == 0)
+            break;
+
+        if (poll(&pe, nfds, -1) == -1) {
+            perror("poll");
+            break;
+        }
+
+        track_handle(&track);
+    }
+
+    track_clear(&track);
+
+    return 0;
+}

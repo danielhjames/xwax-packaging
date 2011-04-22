@@ -25,7 +25,7 @@ endif
 config.status: configure
 	dh_testdir
 	# Add here commands to configure the package.
-ifeq ($(DEB_HOST_ARCH_OS),kfreebsd)
+ifneq ($(DEB_HOST_ARCH_OS),linux)
 	 ./configure --prefix /usr --enable-oss
 else
 	 ./configure --prefix /usr --enable-alsa

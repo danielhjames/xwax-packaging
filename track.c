@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -19,243 +19,175 @@
 
 #define _BSD_SOURCE /* vfork() */
 #include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/poll.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
+#include "rig.h"
 #include "track.h"
 
-#define SAMPLE 4 /* bytes per sample (all channels) */
+#define SAMPLE (sizeof(signed short) * TRACK_CHANNELS) /* bytes per sample */
+#define TRACK_BLOCK_PCM_BYTES (TRACK_BLOCK_SAMPLES * SAMPLE)
 
 #define LOCK(tr) pthread_mutex_lock(&(tr)->mx)
 #define UNLOCK(tr) pthread_mutex_unlock(&(tr)->mx)
 
+/*
+ * Allocate more memory
+ *
+ * Return: -1 if memory could not be allocated, otherwize 0
+ */
 
-/* Start the importer process. On completion, pid and fd are set */
-
-static int start_import(struct track_t *tr, const char *path)
+static int more_space(struct track_t *tr)
 {
-    int pstdout[2];
+    struct track_block_t *block;
 
-    if(pipe(pstdout) == -1) {
-        perror("pipe");
-        return -1;
-    }
-    if(fcntl(pstdout[0], F_SETFL, O_NONBLOCK) == -1) {
-        perror("fcntl");
+    if (tr->blocks >= TRACK_MAX_BLOCKS) {
+        fprintf(stderr, "Maximum track length reached.\n");
         return -1;
     }
 
-    tr->pid = vfork();
-    
-    if(tr->pid == -1) {
-        perror("vfork");
+    block = malloc(sizeof(struct track_block_t));
+    if (block == NULL) {
+        perror("malloc");
         return -1;
-        
-    } else if(tr->pid == 0) { /* child */
-
-        /* Reconnect stdout to this process, leave stderr to terminal */
-
-        if(close(pstdout[0]) != 0) {
-            perror("close");
-            abort();
-        }
-        if(dup2(pstdout[1], STDOUT_FILENO) == -1) {
-            perror("dup2");
-            _exit(EXIT_FAILURE); /* vfork() was used */
-        }
-        if(close(pstdout[1]) != 0) {
-            perror("close");
-            abort();
-        }
-
-        if(execl(tr->importer, "import", path, NULL) == -1) {
-            perror("execl");
-            fprintf(stderr, "Failed to launch importer %s\n", tr->importer);
-            _exit(EXIT_FAILURE); /* vfork() was used */
-        }
-
-        abort(); /* execl() never returns */
     }
 
-    if(close(pstdout[1]) != 0) {
-        perror("close");
-        abort();
-    }
+    tr->block[tr->blocks++] = block;
 
-    tr->fd = pstdout[0];
-    tr->bytes = 0;
-    tr->length = 0;
-    tr->ppm = 0;
-    tr->overview = 0;
-    tr->rate = TRACK_RATE;
+    fprintf(stderr, "Allocated new track block (%d blocks, %zu bytes).\n",
+            tr->blocks, tr->blocks * TRACK_BLOCK_SAMPLES * SAMPLE);
 
     return 0;
 }
 
+/*
+ * Get access to the PCM buffer for incoming audio
+ *
+ * Return: pointer to buffer
+ * Post: len contains the length of the buffer, in bytes
+ */
 
-/* Conclude the importer process. To be called whether the importer
- * was aborted or completed successfully */
-
-static void stop_import(struct track_t *tr)
+void* track_access_pcm(struct track_t *tr, size_t *len)
 {
-    int status;
+    unsigned int block;
+    size_t fill;
 
-    assert(tr->pid != 0);
-
-    if(close(tr->fd) != 0) {
-        perror("close");
-        abort();
+    block = tr->bytes / TRACK_BLOCK_PCM_BYTES;
+    if (block == tr->blocks) {
+        if (more_space(tr) == -1)
+            return NULL;
     }
 
-    if(waitpid(tr->pid, &status, 0) == -1) {
-        perror("waitpid");
-        abort();
-    }
-    tr->pid = 0;
+    fill = tr->bytes % TRACK_BLOCK_PCM_BYTES;
+    *len = TRACK_BLOCK_PCM_BYTES - fill;
 
-    if(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS) {
-        fputs("Track import completed.\n", stderr);
-    } else {
-        fputs("Track import did not complete successfully.\n", stderr);
-    }
+    return (void*)tr->block[block]->pcm + fill;
 }
 
+/*
+ * Notify that audio has been placed in the buffer
+ *
+ * The parameter is the number of stereo samples which have been
+ * placed in the buffer.
+ *
+ * Pre: the number of samples does not overflow the size of the buffer,
+ * given by track_access_pcm()
+ */
 
-/* Prematurely abort the import process */
-
-static void abort_import(struct track_t *tr)
+static void commit_pcm_samples(struct track_t *tr, unsigned int samples)
 {
-    if(kill(tr->pid, SIGTERM) == -1) {
-        perror("kill");
-        abort();
-    }
-
-    stop_import(tr);
-}
-
-
-/* Read the next block of data from the file. Return -1 when an error
- * occurs and requires our attention, 1 if there is no more data to be
- * read, otherwise zero. */
-
-static int read_from_pipe(struct track_t *tr)
-{
-    int r, ls, used;
-    size_t m;
-    unsigned short v;
-    unsigned int s, w;
+    unsigned int fill;
+    signed short *pcm;
     struct track_block_t *block;
 
-    /* Check whether we need to allocate a new block */
-    
-    if(tr->bytes >= (size_t)tr->blocks * TRACK_BLOCK_SAMPLES * SAMPLE) {
+    block = tr->block[tr->length / TRACK_BLOCK_SAMPLES];
+    fill = tr->length % TRACK_BLOCK_SAMPLES;
+    pcm = block->pcm + TRACK_CHANNELS * fill;
 
-        if(tr->blocks >= TRACK_MAX_BLOCKS) {
-            fprintf(stderr, "Maximum track length reached; aborting...\n");
-            return -1;
-        }
-                
-        block = malloc(sizeof(struct track_block_t));
-        if(!block) {
-            perror("malloc");
-            return -1;
-        }
+    assert(samples <= TRACK_BLOCK_SAMPLES - fill);
+    tr->length += samples;
 
-        tr->block[tr->blocks++] = block;
+    /* Meter the new audio */
 
-        fprintf(stderr, "Allocated new track block (%d at %zu bytes).\n",
-                tr->blocks, tr->bytes);
-    }
+    while (samples > 0) {
+        unsigned short v;
+        unsigned int w;
 
-    /* Load in audio to the end of the current block. We've just
-     * allocated a new one if needed, so no possibility of read()
-     * returning zero, except for EOF */
-
-    block = tr->block[tr->bytes / (TRACK_BLOCK_SAMPLES * SAMPLE)];
-    used = tr->bytes % (TRACK_BLOCK_SAMPLES * SAMPLE);
-    
-    r = read(tr->fd, (char*)block->pcm + used,
-             TRACK_BLOCK_SAMPLES * SAMPLE - used);
-
-    if(r == -1) {
-        if(errno == EAGAIN)
-            return 0;
-        perror("read");
-        return -1;
-
-    } else if(r == 0) {
-        m = TRACK_BLOCK_SAMPLES * SAMPLE * tr->blocks / 1024;
-        fprintf(stderr, "Track memory %zuKb PCM, %zuKb PPM, %zuKb overview.\n",
-                m, m / TRACK_PPM_RES, m / TRACK_OVERVIEW_RES);
-
-        return 1;
-    }
-    
-    tr->bytes += r;
-
-    /* Meter the audio which has just been read */
-    
-    for(s = tr->length; s < tr->bytes / SAMPLE; s++) {
-        ls = s % TRACK_BLOCK_SAMPLES;
-        
-        v = (abs(block->pcm[ls * TRACK_CHANNELS])
-             + abs(block->pcm[ls * TRACK_CHANNELS + 1]));
+        v = abs(pcm[0]) + abs(pcm[1]);
 
         /* PPM-style fast meter approximation */
 
-        if(v > tr->ppm)
+        if (v > tr->ppm)
             tr->ppm += (v - tr->ppm) >> 3;
         else
             tr->ppm -= (tr->ppm - v) >> 9;
-        
-        block->ppm[ls / TRACK_PPM_RES] = tr->ppm >> 8;
-        
+
+        block->ppm[fill / TRACK_PPM_RES] = tr->ppm >> 8;
+
         /* Update the slow-metering overview. Fixed point arithmetic
          * going on here */
 
         w = v << 16;
-        
-        if(w > tr->overview)
+
+        if (w > tr->overview)
             tr->overview += (w - tr->overview) >> 8;
         else
             tr->overview -= (tr->overview - w) >> 17;
 
-        block->overview[ls / TRACK_OVERVIEW_RES] = tr->overview >> 24;
-    }
-    
-    tr->length = s;
+        block->overview[fill / TRACK_OVERVIEW_RES] = tr->overview >> 24;
 
-    return 0;
+        fill++;
+        pcm += TRACK_CHANNELS;
+        samples--;
+    }
 }
 
+/*
+ * Notify that data has been placed in the buffer
+ *
+ * This function passes any whole samples to commit_pcm_samples()
+ * and leaves the residual in the buffer ready for next time.
+ *
+ * Pre: len is not greater than the size of the buffer, available
+ * from track_access_pcm()
+ */
+
+void track_commit(struct track_t *tr, size_t len)
+{
+    tr->bytes += len;
+    commit_pcm_samples(tr, tr->bytes / SAMPLE - tr->length);
+}
+
+/*
+ * Initialise object which will hold PCM audio data
+ *
+ * Post: track is initialised
+ */
 
 void track_init(struct track_t *tr, const char *importer)
 {
     tr->importer = importer;
-    tr->pid = 0;
-
     tr->artist = NULL;
     tr->title = NULL;
 
     tr->blocks = 0;
-    tr->bytes = 0;
-    tr->length = 0;
+    tr->importing = false;
     tr->rate = TRACK_RATE;
 
-    if (pthread_mutex_init(&tr->mx, 0) != 0)
+    track_empty(tr);
+
+    if (pthread_mutex_init(&tr->mx, NULL) != 0)
         abort();
 }
 
-
-/* Destroy this track from memory, and any child process */
+/*
+ * Destroy this track from memory
+ *
+ * Terminates any import processes and frees any memory allocated by
+ * this object.
+ *
+ * Pre: track is initialised
+ */
 
 void track_clear(struct track_t *tr)
 {
@@ -263,69 +195,44 @@ void track_clear(struct track_t *tr)
 
     /* Force a cleanup of whichever state we are in */
 
-    if(tr->pid != 0)
-        abort_import(tr);
+    if (tr->importing) {
+        import_terminate(&tr->import);
+        import_stop(&tr->import);
+    }
 
-    for(n = 0; n < tr->blocks; n++)
+    for (n = 0; n < tr->blocks; n++)
         free(tr->block[n]);
 
-    if(pthread_mutex_destroy(&tr->mx) != 0)
+    if (pthread_mutex_destroy(&tr->mx) != 0)
         abort();
 }
 
+/*
+ * Make the given track empty
+ *
+ * This function does not deallocate the buffer, which is a quick
+ * way to handle concurrency issues -- the realtime thread accessing
+ * the audio.
+ *
+ * Post: track is 0 seconds in length
+ */
 
-/* Return the number of file descriptors which should be watched for
- * this track, and fill pe */
-
-int track_pollfd(struct track_t *tr, struct pollfd *pe)
+void track_empty(struct track_t *tr)
 {
-    int r;
-
-    LOCK(tr);
-
-    if(tr->pid != 0) {
-        pe->fd = tr->fd;
-        pe->revents = 0;
-        pe->events = POLLIN | POLLHUP | POLLERR;
-        tr->pe = pe;
-        r = 1;
-    } else {
-        tr->pe = NULL;
-        r = 0;
-    }
-
-    UNLOCK(tr);
-    return r;
+    tr->bytes = 0;
+    tr->length = 0;
+    tr->ppm = 0;
+    tr->overview = 0;
 }
 
-
-/* Handle any activity on this track, whatever the current state */
-
-int track_handle(struct track_t *tr)
-{
-    int r;
-
-    /* Only one thread is allowed to call this function, and it owns
-     * the poll entry */
-
-    if(!tr->pe || !tr->pe->revents)
-        return 0;
-
-    LOCK(tr);
-
-    if(tr->pid != 0) {
-        r = read_from_pipe(tr);
-        if(r != 0)
-            stop_import(tr);
-    }
-
-    UNLOCK(tr);
-    return 0;
-}
-
-
-/* A request to begin importing a new track. Can be called when the
- * track is in any state */
+/*
+ * Import audio from the given path
+ *
+ * Cleans up any existing import operation, and so can be called
+ * when the track is in any initialised state.
+ *
+ * Post: track is importing
+ */
 
 int track_import(struct track_t *tr, const char *path)
 {
@@ -335,20 +242,64 @@ int track_import(struct track_t *tr, const char *path)
 
     /* Abort any running import process */
 
-    if(tr->pid != 0)
-        abort_import(tr);
+    if (tr->importing) {
+        import_terminate(&tr->import);
+        import_stop(&tr->import);
+    }
 
     /* Start the new import process */
 
-    r = start_import(tr, path);
-    if(r < 0) {
-        UNLOCK(tr);
-        return -1;
+    r = import_start(&tr->import, tr, tr->importer, path);
+
+    UNLOCK(tr);
+
+    return r;
+}
+
+/*
+ * Get entry for use by poll()
+ *
+ * Return: number of file descriptors placed in *pe
+ * Post: *pe contains 0 or 1 file descriptors
+ */
+
+size_t track_pollfd(struct track_t *tr, struct pollfd *pe)
+{
+    int r;
+
+    LOCK(tr);
+
+    if (tr->importing) {
+        import_pollfd(&tr->import, pe);
+        tr->has_poll = true;
+        r = 1;
+    } else {
+        tr->has_poll = false;
+        r = 0;
     }
 
     UNLOCK(tr);
 
-    rig_awaken(tr->rig);
+    return r;
+}
 
-    return 0;
+/*
+ * Handle any file descriptor activity on this track
+ */
+
+void track_handle(struct track_t *tr)
+{
+    LOCK(tr);
+
+    /* Number of file descriptors watched will fluctuate between zero
+     * and non-zero, so we need to use has_poll */
+
+    if (tr->importing && tr->has_poll) {
+        if (import_handle(&tr->import) == -1) {
+            import_stop(&tr->import);
+            tr->importing = false;
+        }
+    }
+
+    UNLOCK(tr);
 }

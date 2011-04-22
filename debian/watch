@@ -1,0 +1,3 @@
+version=3
+http://www.xwax.co.uk/download.html \
+ releases/xwax-([\d\.]*).tar.gz

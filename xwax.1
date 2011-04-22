@@ -29,10 +29,26 @@ below.
 Scan the music library at the given path.
 
 .TP
+.B \-p \fIpath\fR
+Load a playlist at the given path. This operation is identical to
+scanning a music library except that the order is defined by the
+output of the scanner executable.
+
+.TP
 .B \-t \fIname\fR
-Use the named timecode for subsequent decks. See -h for a list of
+Use the named timecode for subsequent decks. See \-h for a list of
 valid timecodes. You will need the corresponding timecode signal on
 vinyl to control playback.
+
+.TP
+.B \-33
+Set the reference playback speed for subsequent decks to 33 and one
+third revolutions per minute. This is the default.
+
+.TP
+.B \-45
+Set the reference playback speed for subsequent decks to 45
+revolutions per minute.
 
 .TP
 .B \-i \fIpath\fR
@@ -140,14 +156,13 @@ l l l l.
 Deck 0	Deck 1	Deck 2
 F1	F5	F9	Load currently selected track to this deck
 F2	F6	F10	Reset start of track to the current position
-F3	F7	F11	Disconnect turntable control
-F4	F8	F12	Reconnect turntable control
+F3	F7	F11	Toggle timecode control on/off
 .TE
 
 Audio display controls:
 
 .TP
-+, -
++, \-
 Zoom in/out the close-up audio meters for all decks.
 
 .SH EXAMPLES
@@ -156,49 +171,56 @@ Zoom in/out the close-up audio meters for all decks.
 2-deck setup using one directory of music and OSS devices:
 .sp
 .RS
-xwax -l ~/music -d /dev/dsp -d /dev/dsp1
+xwax \-l ~/music \-d /dev/dsp \-d /dev/dsp1
 .RE
 
 .P
 As above, but using ALSA devices:
 .sp
 .RS
-xwax -l ~/music -d hw:0 -d hw:1
+xwax \-l ~/music \-d hw:0 \-d hw:1
 .RE
 
 .P
 2-deck setup using a different timecode on each deck:
 .sp
 .RS
-xwax -l ~/music -t serato_2a -d hw:0 -t mixvibes_v2 -d hw:1
+xwax \-l ~/music \-t serato_2a \-d hw:0 \-t mixvibes_v2 \-d hw:1
+.RE
+
+.P
+As above, but with the second deck at 45 RPM:
+.sp
+.RS
+xwax \-l ~/music \-t serato_2a \-d hw:0 \-t mixvibes_v2 \-45 \-d hw:1
 .RE
 
 .P
 3-deck setup with the third deck at a higher sample rate:
 .sp
 .RS
-xwax -l ~/music -r 48000 -a hw:0 -a hw:1 -r 96000 -a hw:2
+xwax \-l ~/music \-r 48000 \-a hw:0 \-a hw:1 \-r 96000 \-a hw:2
 .RE
 
 .P
 Using all three device types simultaneously, one deck on each:
 .sp
 .RS
-xwax -l ~/music -a hw:0 -d /dev/dsp1 -j jack0
+xwax \-l ~/music \-a hw:0 \-d /dev/dsp1 \-j jack0
 .RE
 
 .P
 Scan multiple music libraries:
 .sp
 .RS
-xwax -l ~/music -l ~/sounds -l ~/mixes -a hw:0
+xwax \-l ~/music \-l ~/sounds \-l ~/mixes \-a hw:0
 .RE
 
 .P
 Scan a second music library using a custom script:
 .sp
 .RS
-xwax -l ~/music -i ./custom-scan -l ~/sounds -a hw:0
+xwax \-l ~/music \-i ./custom-scan \-l ~/sounds \-a hw:0
 .RE
 
 .SH HOMEPAGE

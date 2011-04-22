@@ -1,3 +1,40 @@
+xwax (0.9-2) unstable; urgency=low
+
+  * Removed quilt related stuff from debian/rules
+  * Updated copyright notice
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Sat, 23 Apr 2011 04:30:14 +1000
+
+xwax (0.9-1) unstable; urgency=low
+
+  * New upstream release
+  * Updated package dependencies for import script
+  * manpage patch no longer required
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Tue, 19 Apr 2011 16:29:05 +1000
+
+xwax (0.8-3) unstable; urgency=low
+
+  * Include patch to stop installation of redundant copyright notice
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Thu, 20 Jan 2011 09:12:02 +1100
+
+xwax (0.8-2) unstable; urgency=low
+
+  * Include patch to set EXECDIR correctly in Makefile
+
+ -- Mitchell Smith <mjs@kryptonite.mjsprojects.net>  Thu, 20 Jan 2011 08:38:20 +1100
+
+xwax (0.8-1) unstable; urgency=low
+
+  * New upstream release (Closes: #603011)
+  * Included manpage patch from Daniel Holbach
+  * Switch to dpkg-source 3.0 (quilt) format
+  * Updated standards version to 3.9.1
+  * Changed configure options to only use alsa on Linux (Closes: #597892)
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Tue, 18 Jan 2011 11:48:01 +1100
+
 xwax (0.7-5) unstable; urgency=low
 
   * Added dependency on ttf-dejavu-extra which provides 
