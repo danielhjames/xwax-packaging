@@ -1,4 +1,4 @@
-# Copyright (C) 2009 Mark Hills <mark@pogo.org.uk>
+# Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2, as
@@ -15,6 +15,10 @@
 # MA 02110-1301, USA.
 #
 
+INSTALL = install
+
+PREFIX = $(HOME)
+
 CFLAGS += -Wall -O3 -MMD
 LDFLAGS += -O3
 
@@ -27,11 +31,18 @@ JACK_LIBS = -ljack
 
 -include .config
 
+# Installation paths
+
+BINDIR = $(PREFIX)/bin
+EXECDIR = $(PREFIX)/libexec
+MANDIR = $(PREFIX)/share/man
+DOCDIR = $(PREFIX)/share/doc
+
 # Core objects and libraries
 
-OBJS = interface.o library.o listing.o lut.o player.o pitch.o rig.o \
-	timecoder.o track.o xwax.o
-DEVICE_OBJS = device.o oss.o
+OBJS = interface.o library.o listing.o lut.o player.o rig.o \
+	selector.o timecoder.o track.o xwax.o
+DEVICE_OBJS = device.o
 DEVICE_CPPFLAGS =
 DEVICE_LIBS =
 
@@ -49,17 +60,37 @@ DEVICE_CPPFLAGS += -DWITH_JACK
 DEVICE_LIBS += $(JACK_LIBS)
 endif
 
+ifdef OSS
+DEVICE_OBJS += oss.o
+DEVICE_CPPFLAGS += -DWITH_OSS
+endif
+
 # Rules
 
-.PHONY:		clean
+.PHONY:		clean install
 
 xwax:		$(OBJS) $(DEVICE_OBJS)
-xwax:		LDLIBS += $(SDL_LIBS) $(DEVICE_LIBS)
+xwax:		LDLIBS += $(SDL_LIBS) $(DEVICE_LIBS) -lm
 xwax:		LDFLAGS += -pthread
 
 interface.o:	CFLAGS += $(SDL_CFLAGS)
 
-xwax.o:		CFLAGS += $(DEVICE_CPPFLAGS)
+xwax.o:		CFLAGS += $(SDL_CFLAGS) $(DEVICE_CPPFLAGS)
+xwax.o:		CPPFLAGS += -DEXECDIR=\"$(EXECDIR)\"
+
+install:
+		$(INSTALL) -d $(BINDIR)
+		$(INSTALL) xwax $(BINDIR)/xwax
+		$(INSTALL) -d $(EXECDIR)
+		$(INSTALL) scan $(EXECDIR)/xwax-scan
+		$(INSTALL) import $(EXECDIR)/xwax-import
+		$(INSTALL) -d $(MANDIR)/man1
+		$(INSTALL) -m 0644 xwax.1 $(MANDIR)/man1/xwax.1
+		$(INSTALL) -d $(DOCDIR)/xwax
+		$(INSTALL) -m 0644 CHANGES $(DOCDIR)/xwax/CHANGES
+		$(INSTALL) -m 0644 COPYING $(DOCDIR)/xwax/COPYING
+		$(INSTALL) -m 0644 README $(DOCDIR)/xwax/README
+
 
 clean:
 		rm -f xwax *.o *.d *~

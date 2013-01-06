@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2009 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -30,7 +30,6 @@
 #include "track.h"
 
 #define REALTIME_PRIORITY 80
-#define POLL_TIMEOUT 10000
 
 
 int rig_init(struct rig_t *rig)
@@ -78,7 +77,7 @@ int rig_service(struct rig_t *rig)
                 pe += track_pollfd(rig->track[n], pe);
         }
 
-        r = poll(pt, pe - pt, POLL_TIMEOUT);
+        r = poll(pt, pe - pt, -1);
         
         if(r == -1 && errno != EINTR) {
             perror("poll");
@@ -137,7 +136,7 @@ int rig_realtime(struct rig_t *rig)
     }
 
     while(!rig->finished) {        
-        r = poll(rig->pt, rig->npt, POLL_TIMEOUT);
+        r = poll(rig->pt, rig->npt, -1);
         
         if(r == -1 && errno != EINTR) {
             perror("poll");
@@ -154,14 +153,14 @@ int rig_realtime(struct rig_t *rig)
 }
 
 
-void *service(void *p)
+void* service(void *p)
 {
     rig_service(p);
     return p;
 }
 
 
-void *realtime(void *p)
+void* realtime(void *p)
 {
     rig_realtime(p);
     return p;
