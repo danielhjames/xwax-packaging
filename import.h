@@ -17,26 +17,28 @@
  *
  */
 
-#ifndef LUT_H
-#define LUT_H
+#ifndef IMPORT_H
+#define IMPORT_H
 
-typedef unsigned int slot_no_t;
+#include <sys/types.h>
 
-struct slot_t {
-    unsigned int timecode;
-    slot_no_t next; /* next slot with the same hash */
+/*
+ * State information for an import operation -- data is piped from
+ * an external process into a track
+ */
+
+struct import_t {
+    int fd;
+    pid_t pid;
+    struct pollfd *pe;
+    struct track_t *track;
 };
 
-struct lut_t {
-    struct slot_t *slot;
-    slot_no_t *table, /* hash -> slot lookup */
-        avail; /* next available slot */
-};
-
-int lut_init(struct lut_t *lut, int nslots);
-void lut_clear(struct lut_t *lut);
-
-void lut_push(struct lut_t *lut, unsigned int timecode);
-unsigned int lut_lookup(struct lut_t *lut, unsigned int timecode);
+int import_start(struct import_t *im, struct track_t *track,
+                 const char *cmd, const char *path);
+void import_pollfd(struct import_t *im, struct pollfd *pe);
+int import_handle(struct import_t *im);
+void import_terminate(struct import_t *im);
+void import_stop(const struct import_t *im);
 
 #endif

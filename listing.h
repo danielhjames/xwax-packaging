@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,6 +20,8 @@
 #ifndef LISTING_H
 #define LISTING_H
 
+#include <stddef.h>
+
 struct record_t {
     char *pathname, *artist, *title;
 };
@@ -28,7 +30,7 @@ struct record_t {
 
 struct listing_t {
     struct record_t **record;
-    int size, entries;
+    size_t size, entries;
 };
 
 void listing_init(struct listing_t *ls);
@@ -38,6 +40,7 @@ int listing_add(struct listing_t *li, struct record_t *lr);
 int listing_copy(const struct listing_t *src, struct listing_t *dest);
 int listing_match(struct listing_t *src, struct listing_t *dest,
 		  const char *match);
+struct record_t* listing_insert(struct listing_t *ls, struct record_t *item);
 void listing_debug(struct listing_t *ls);
 void listing_sort(struct listing_t *ls);
 

@@ -17,26 +17,36 @@
  *
  */
 
-#ifndef LUT_H
-#define LUT_H
+#ifndef REALTIME_H
+#define REALTIME_H
 
-typedef unsigned int slot_no_t;
+#include <stdbool.h>
 
-struct slot_t {
-    unsigned int timecode;
-    slot_no_t next; /* next slot with the same hash */
+#define MAX_DEVICES 4
+#define MAX_DEVICE_POLLFDS 32
+
+/*
+ * State data for the realtime thread, maintained during rt_start and
+ * rt_stop
+ */
+
+struct rt_t {
+    pthread_t ph;
+    bool finished;
+
+    size_t ndv;
+    struct device_t *dv[MAX_DEVICES];
+
+    size_t npt;
+    struct pollfd pt[MAX_DEVICE_POLLFDS];
 };
 
-struct lut_t {
-    struct slot_t *slot;
-    slot_no_t *table, /* hash -> slot lookup */
-        avail; /* next available slot */
-};
+void rt_init(struct rt_t *rt);
+void rt_clear(struct rt_t *rt);
 
-int lut_init(struct lut_t *lut, int nslots);
-void lut_clear(struct lut_t *lut);
+int rt_add_device(struct rt_t *rt, struct device_t *dv);
 
-void lut_push(struct lut_t *lut, unsigned int timecode);
-unsigned int lut_lookup(struct lut_t *lut, unsigned int timecode);
+int rt_start(struct rt_t *rt);
+void rt_stop(struct rt_t *rt);
 
 #endif

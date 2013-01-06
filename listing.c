@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,66 +26,93 @@
 
 #include "listing.h"
 
-#define BLOCK 256
+#define BLOCK 1024
 #define MAX_WORDS 32
 #define SEPARATOR ' '
 
+/*
+ * Initialise a record listing
+ */
 
 void listing_init(struct listing_t *ls)
 {
     ls->record = NULL;
+    ls->size = 0;
     ls->entries = 0;
 }
 
+/*
+ * Deallocate resources associated with this listing
+ *
+ * The listing does not allocate records itself, so it is not
+ * responsible for deallocating them.
+ */
 
 void listing_clear(struct listing_t *ls)
 {
-    if(ls->record != NULL)
+    if (ls->record != NULL)
         free(ls->record);
 }
 
+/*
+ * Blank the listing so it contains no entries
+ *
+ * We don't de-allocate memory, but this gives us an advantage where
+ * listing re-use is of similar size.
+ */
 
 void listing_blank(struct listing_t *ls)
 {
     ls->entries = 0;
 }
 
+/*
+ * Enlarge the storage space of the listing to at least the target
+ * size
+ *
+ * Return: 0 on success or -1 on memory allocation failure
+ * Post: size of listing is greater than or equal to target
+ */
 
-/* Add a record to the listing. Return 0 on success, or -1 on memory
- * allocation failure */
-
-int listing_add(struct listing_t *ls, struct record_t *lr)
+static int enlarge(struct listing_t *ls, size_t target)
 {
+    size_t p;
     struct record_t **ln;
 
-    if(ls->record == NULL) { /* initial entry */
+    if (target <= ls->size)
+        return 0;
 
-        ln = malloc(sizeof(struct record_t*) * BLOCK);
-        if(ln == NULL) {
-            perror("malloc");
-            return -1;
-        }
+    p = target + BLOCK - 1; /* pre-allocate additional entries */
 
-        ls->record = ln;
-        ls->size = BLOCK;
-
-    } else if(ls->entries == ls->size) {
-
-        ln = realloc(ls->record, sizeof(struct record_t*) * ls->size * 2);
-        if(ln == NULL) {
-            perror("realloc");
-            return -1;
-        }
-
-        ls->record = ln;
-        ls->size *= 2;
+    ln = realloc(ls->record, sizeof(struct record_t*) * p);
+    if (ln == NULL) {
+        perror("realloc");
+        return -1;
     }
 
-    ls->record[ls->entries++] = lr;
-
+    ls->record = ln;
+    ls->size = p;
     return 0;
 }
 
+/*
+ * Add a record to the listing
+ *
+ * Return: 0 on success or -1 on memory allocation failure
+ */
+
+int listing_add(struct listing_t *ls, struct record_t *lr)
+{
+    if (enlarge(ls, ls->entries + 1) == -1)
+        return -1;
+
+    ls->record[ls->entries++] = lr;
+    return 0;
+}
+
+/*
+ * Standard comparison function between two records
+ */
 
 static int record_cmp(const struct record_t *a, const struct record_t *b)
 {
@@ -103,72 +130,49 @@ static int record_cmp(const struct record_t *a, const struct record_t *b)
     else if (r > 0)
         return 1;
 
-    return 0;
+    return strcmp(a->pathname, b->pathname);
 }
 
+/*
+ * Comparison function, see qsort(3)
+ */
 
-static void quicksort_swap(struct listing_t *ls, int i, int j)
+static int qcompar(const void *a, const void *b)
 {
-    struct record_t *tmp;
-
-    tmp = ls->record[i];
-    ls->record[i] = ls->record[j];
-    ls->record[j] = tmp;
+    return record_cmp(*(struct record_t **)a, *(struct record_t **)b);
 }
 
-
-static int quicksort_partition(struct listing_t *ls, int left, int right)
-{
-    struct record_t *pivot;
-
-    pivot = ls->record[left];
-
-    while(left < right) {
-        while((left < right) && (record_cmp(ls->record[right], pivot) >= 0))
-            right--;
-        quicksort_swap(ls, right, left);
-        while((left < right) && (record_cmp(pivot, ls->record[left]) >= 0))
-            left++;
-        quicksort_swap(ls, right, left);
-    }
-
-    return left;
-}
-
-
-static void quicksort(struct listing_t *ls, int left, int right)
-{
-    int pivot;
-
-    if(left < right) {
-        pivot = quicksort_partition(ls, left, right);
-        quicksort(ls, left, pivot);
-        quicksort(ls, pivot + 1, right);
-    }
-}
-
+/*
+ * Post: listing is sorted
+ */
 
 void listing_sort(struct listing_t *ls)
 {
-    quicksort(ls, 0, ls->entries - 1);
+    qsort(ls->record, ls->entries, sizeof(struct record_t*), qcompar);
 }
 
-
-/* Return true if the given record matches the given string. This
- * function defines what constitutes a 'match' */
+/*
+ * Check if a record matches the given string. This function is the
+ * definitive code which defines what constitutes a 'match'.
+ *
+ * Return: true if this is a match, otherwise false
+ */
 
 static bool record_match(struct record_t *re, const char *match)
 {
-    if(strcasestr(re->artist, match) != NULL)
+    if (strcasestr(re->artist, match) != NULL)
         return true;
-    if(strcasestr(re->title, match) != NULL)
+    if (strcasestr(re->title, match) != NULL)
         return true;
     return false;
 }
 
-
-/* Return true if the given record matches all of the given strings
- * in a NULL-terminated array */
+/*
+ * Check for a match against all the strings in a given
+ * NULL-terminated array
+ *
+ * Return: true if the given record matches, otherwise false
+ */
 
 static bool record_match_all(struct record_t *re, char **matches)
 {
@@ -180,9 +184,12 @@ static bool record_match_all(struct record_t *re, char **matches)
     return true;
 }
 
-
-/* Copy the source listing; return 0 on succes or -1 on memory
- * allocation failure, which leaves dest valid but incomplete */
+/*
+ * Copy the source listing
+ *
+ * Return: 0 on success or -1 on memory allocation failure
+ * Post: on failure, dest is valid but incomplete
+ */
 
 int listing_copy(const struct listing_t *src, struct listing_t *dest)
 {
@@ -190,19 +197,24 @@ int listing_copy(const struct listing_t *src, struct listing_t *dest)
 
     listing_blank(dest);
 
-    for(n = 0; n < src->entries; n++) {
-	if(listing_add(dest, src->record[n]) != 0)
+    for (n = 0; n < src->entries; n++) {
+	if (listing_add(dest, src->record[n]) != 0)
 	    return -1;
     }
 
     return 0;
 }
 
-
-/* Copy the subset of the source listing which matches the given
- * string; this function defines what constitutes a match; return 0 on
- * success, or -1 on memory allocation failure, which leaves dest
- * valid but incomplete */
+/*
+ * Find entries from the source listing with match the given string
+ *
+ * Copy the subset of the source listing which matches the given
+ * string into the destination. This function defines what constitutes
+ * a match.
+ *
+ * Return: 0 on success, or -1 on memory allocation failure
+ * Post: on failure, dest is valid but incomplete
+ */
 
 int listing_match(struct listing_t *src, struct listing_t *dest,
 		  const char *match)
@@ -218,7 +230,7 @@ int listing_match(struct listing_t *src, struct listing_t *dest,
     for (;;) {
         char *s;
 
-        if(n == MAX_WORDS - 1) {
+        if (n == MAX_WORDS - 1) {
             fputs("Ignoring excessive words in match string.\n", stderr);
             break;
         }
@@ -227,7 +239,7 @@ int listing_match(struct listing_t *src, struct listing_t *dest,
         n++;
 
         s = strchr(buf, SEPARATOR);
-        if(s == NULL)
+        if (s == NULL)
             break;
         *s = '\0';
         buf = s + 1; /* skip separator */
@@ -236,11 +248,11 @@ int listing_match(struct listing_t *src, struct listing_t *dest,
 
     listing_blank(dest);
 
-    for(n = 0; n < src->entries; n++) {
+    for (n = 0; n < src->entries; n++) {
         re = src->record[n];
 
-        if(record_match_all(re, words)) {
-            if(listing_add(dest, re) == -1)
+        if (record_match_all(re, words)) {
+            if (listing_add(dest, re) == -1)
                 return -1;
         }
     }
@@ -248,11 +260,81 @@ int listing_match(struct listing_t *src, struct listing_t *dest,
     return 0;
 }
 
+/*
+ * Binary search of sorted listing
+ *
+ * We implement our own binary search rather than using the bsearch()
+ * from stdlib.h, because we need to know the position to insert to if
+ * the item is not found.
+ *
+ * Pre: base is sorted
+ * Return: position of match >= item
+ * Post: on exact match, *found is true
+ */
+
+static size_t bin_search(struct record_t **base, size_t n,
+                         struct record_t *item, bool *found)
+{
+    int r;
+    size_t mid;
+
+    /* Return the first entry ordered after this one */
+
+    if (n == 0) {
+        *found = false;
+        return 0;
+    }
+
+    mid = n / 2;
+    r = record_cmp(item, base[mid]);
+
+    if (r < 0)
+        return bin_search(base, mid, item, found);
+    if (r > 0)
+        return mid + 1 + bin_search(base + mid + 1, n - mid - 1, item, found);
+
+    *found = true;
+    return mid;
+}
+
+/*
+ * Insert or re-use an entry in a sorted listing
+ *
+ * Pre: listing is sorted
+ * Return: pointer to item, or existing entry; NULL if out of memory
+ * Post: listing is sorted and contains item or a matching item
+ */
+
+struct record_t* listing_insert(struct listing_t *ls, struct record_t *item)
+{
+    bool found;
+    size_t z;
+
+    z = bin_search(ls->record, ls->entries, item, &found);
+    if (found)
+        return ls->record[z];
+
+    /* Insert the new item */
+
+    if (enlarge(ls, ls->entries + 1) == -1)
+        return NULL;
+
+    memmove(ls->record + z + 1, ls->record + z,
+            sizeof(struct record_t*) * (ls->entries - z));
+    ls->record[z] = item;
+    ls->entries++;
+
+    return item;
+}
+
+/*
+ * Debug the content of a listing to standard error
+ */
 
 void listing_debug(struct listing_t *ls)
 {
     int n;
 
-    for(n = 0; n < ls->entries; n++)
+    for (n = 0; n < ls->entries; n++)
         fprintf(stderr, "%d: %s\n", n, ls->record[n]->pathname);
 }

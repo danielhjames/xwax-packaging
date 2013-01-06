@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -16,6 +16,8 @@
  * MA 02110-1301, USA.
  *
  */
+
+#include <stddef.h>
 
 #include "device.h"
 
@@ -42,23 +44,19 @@ unsigned int device_sample_rate(struct device_t *dv)
 
 /* Start the device inputting and outputting audio */
 
-int device_start(struct device_t *dv)
+void device_start(struct device_t *dv)
 {
-    if(dv->type->start)
-        return dv->type->start(dv);
-    else
-        return 0;
+    if (dv->type->start != NULL)
+        dv->type->start(dv);
 }
 
 
 /* Stop the device */
 
-int device_stop(struct device_t *dv)
+void device_stop(struct device_t *dv)
 {
-    if(dv->type->stop)
-        return dv->type->stop(dv);
-    else
-        return 0;
+    if (dv->type->stop != NULL)
+        dv->type->stop(dv);
 }
 
 
@@ -80,7 +78,7 @@ void device_clear(struct device_t *dv)
 
 ssize_t device_pollfds(struct device_t *dv, struct pollfd *pe, size_t z)
 {
-    if(dv->type->pollfds)
+    if (dv->type->pollfds)
         return dv->type->pollfds(dv, pe, z);
     else
         return 0;
@@ -93,8 +91,5 @@ ssize_t device_pollfds(struct device_t *dv, struct pollfd *pe, size_t z)
 
 int device_handle(struct device_t *dv)
 {
-    if(dv->type->handle)
-        return dv->type->handle(dv);
-    else
-        return 0;
+    return dv->type->handle(dv);
 }

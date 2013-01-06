@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,33 +20,25 @@
 #ifndef RIG_H
 #define RIG_H
 
-#define MAX_DEVICES 4
-#define MAX_TRACKS 8
-#define MAX_PLAYERS 4
-#define MAX_TIMECODERS 4
+#include <stdbool.h>
 
-#define MAX_DEVICE_POLLFDS 32
+#define MAX_TRACKS 3
 
 struct rig_t {
-    int finished;
-    pthread_t pt_realtime, pt_service;
-
-    struct device_t *device[MAX_DEVICES];
-    struct track_t *track[MAX_TRACKS];
-    struct player_t *player[MAX_PLAYERS];
-    struct timecoder_t *timecoder[MAX_TIMECODERS];
-
     int event[2]; /* pipe to wake up service thread */
 
-    /* Poll table for devices */
-    
-    int npt;
-    struct pollfd pt[MAX_DEVICE_POLLFDS];
+    size_t ntrack;
+    struct track_t *track[MAX_TRACKS];
 };
 
 int rig_init(struct rig_t *rig);
-int rig_start(struct rig_t *rig);
+void rig_clear(struct rig_t *rig);
+
+void rig_add_track(struct rig_t *rig, struct track_t *track);
+
+int rig_main(struct rig_t *rig);
+
 int rig_awaken(struct rig_t *rig);
-int rig_stop(struct rig_t *rig);
+int rig_quit(struct rig_t *rig);
 
 #endif
