@@ -1,5 +1,6 @@
 xwax (1.3-1) unstable; urgency=low
 
+  [ Mitchell Smith ]
   * New upstream release. (Closes: #637207)
   * Moved to Debian Multimedia Maintainers team.
   * debian/patches/01-fix-libexec-dir-in-makefile.patch: dropped.
@@ -16,6 +17,14 @@ xwax (1.3-1) unstable; urgency=low
     - set EXECDIR.
     - move clean bits to debian/clean.
   * debian/copyright: use DEP 5.
+
+  [ Alessio Treglia ]
+  * Add Mitchell and myself to the Uploaders field.
+  * Enable JACk support.
+  * Enable hardened flags.
+  * Refresh debian/copyright, port it to Copyright format 1.0.
+  * Add Vcs tags.
+  * Bump Standards.
 
  -- Mitchell Smith <mjs@mjsprojects.net>  Thu, 17 Jan 2013 10:17:03 +1000
 
