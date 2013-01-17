@@ -19,9 +19,9 @@ endif
 
 override_dh_auto_configure:
 ifneq ($(DEB_HOST_ARCH_OS),linux)
-	./configure --prefix /usr --enable-oss
+	./configure --prefix /usr --enable-oss --enable-jack
 else
-	./configure --prefix /usr --enable-alsa
+	./configure --prefix /usr --enable-alsa --enable-jack
 endif
 
 override_dh_auto_build:

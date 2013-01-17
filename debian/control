@@ -8,6 +8,7 @@ Uploaders:
 Build-Depends:
  debhelper (>= 7.0.50~),
  libasound2-dev [linux-any],
+ libjack-dev,
  libsdl-ttf2.0-dev
 Standards-Version: 3.9.3
 Homepage: http://www.xwax.co.uk/
@@ -24,6 +25,8 @@ Recommends:
  cdparanoia,
  ffmpeg,
  mpg123
+Suggests:
+ jackd
 Description: open-source vinyl emulation software for Linux
  xwax is open-source vinyl emulation software for Linux. It allows DJs and
  turntablists to playback digital audio files (MP3, Ogg Vorbis, FLAC, AAC and
