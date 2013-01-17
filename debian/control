@@ -2,7 +2,9 @@ Source: xwax
 Section: sound
 Priority: extra
 Maintainer: Debian Multimedia Maintainers <pkg-multimedia-maintainers@lists.alioth.debian.org>
-XSBC-Original-Maintainer: Mitchell Smith <mjs@mjsprojects.net>
+Uploaders:
+ Alessio Treglia <alessio@debian.org>,
+ Mitchell Smith <mjs@mjsprojects.net>
 Build-Depends:
  debhelper (>= 7.0.50~),
  libasound2-dev [linux-any],
