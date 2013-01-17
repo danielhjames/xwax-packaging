@@ -1,16 +1,29 @@
-Format-Specification: http://wiki.debian.org/Proposals/CopyrightFormat?action=recall&rev=523
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: xwax
-Upstream-Maintainer: mark@pogo.org.uk
-Upstream-Source: https://xwax.co.uk/download.html
+Upstream-Contact: mark@pogo.org.uk
+Source: http://xwax.org/releases/
 
 Files: *
-Copyright: 2011 Mark Hills
-License: GPL-2
- The full text of the GPL is distributed as in
- /usr/share/common-licenses/GPL-2 on Debian systems.
+Copyright: 2012 Mark Hills <mark@xwax.org>
+License: GPL-2+
 
 Files: debian/*
-Copyright: 2010 2011 Mitchell Smith
+Copyright: 2010-2011 Mitchell Smith
 License: GPL-2+
- The full text of the GPL is distributed as in
- /usr/share/common-licenses/GPL-2 on Debian systems.
+
+License: GPL-2+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ On Debian systems, the complete text of the GNU General Public
+ License version 2 can be found in /usr/share/common-licenses/GPL-2.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
