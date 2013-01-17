@@ -17,13 +17,21 @@
  *
  */
 
-#ifndef INTERFACE_H
-#define INTERFACE_H
+#ifndef DEBUG_H
+#define DEBUG_H
 
-#include "deck.h"
-#include "library.h"
+#include <stdio.h>
 
-int interface_start(struct library *lib, const char *geo);
-void interface_stop();
+#ifdef DEBUG
+#define debug(...) { \
+    fprintf(stderr, "%s:%d: ", __func__, __LINE__); \
+    fprintf(stderr, __VA_ARGS__); \
+    fputc('\n', stderr); \
+}
+#define dassert(x) assert(x)
+#else
+#define debug(...)
+#define dassert(x)
+#endif
 
 #endif

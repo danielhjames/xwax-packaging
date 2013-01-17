@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,27 +17,29 @@
  *
  */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/mman.h> /* mlockall() */
 
 #include <SDL.h> /* may override main() */
 
 #include "alsa.h"
+#include "controller.h"
 #include "device.h"
+#include "dicer.h"
 #include "interface.h"
 #include "jack.h"
 #include "library.h"
 #include "oss.h"
-#include "player.h"
 #include "realtime.h"
+#include "thread.h"
 #include "rig.h"
 #include "timecoder.h"
 #include "track.h"
 #include "xwax.h"
-
-#define MAX_DECKS 3
 
 #define DEFAULT_OSS_BUFFERS 8
 #define DEFAULT_OSS_FRAGMENT 7
@@ -45,26 +47,44 @@
 #define DEFAULT_ALSA_BUFFER 8 /* milliseconds */
 
 #define DEFAULT_RATE 44100
+#define DEFAULT_PRIORITY 80
 
 #define DEFAULT_IMPORTER EXECDIR "/xwax-import"
 #define DEFAULT_SCANNER EXECDIR "/xwax-scan"
 #define DEFAULT_TIMECODE "serato_2a"
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*x))
+
 char *banner = "xwax " VERSION \
-    " (C) Copyright 2011 Mark Hills <mark@pogo.org.uk>";
+    " (C) Copyright 2012 Mark Hills <mark@xwax.org>";
+
+size_t ndeck;
+struct deck deck[3];
 
 static void usage(FILE *fd)
 {
-    fprintf(fd, "Usage: xwax [<options>]\n\n"
+    fprintf(fd, "Usage: xwax [<options>]\n\n");
+
+    fprintf(fd, "Program-wide options:\n"
+      "  -k             Lock real-time memory into RAM\n"
+      "  -q <n>         Real-time priority (0 for no priority, default %d)\n"
+      "  -g <n>x<n>     Set display geometry\n"
+      "  -h             Display this message to stdout and exit\n\n",
+      DEFAULT_PRIORITY);
+
+    fprintf(fd, "Music library options:\n"
       "  -l <path>      Location to scan for audio tracks\n"
-      "  -p <path>      Ordered playlist for audio tracks\n"
+      "  -s <program>   Library scanner (default '%s')\n\n",
+      DEFAULT_SCANNER);
+
+    fprintf(fd, "Deck options:\n"
       "  -t <name>      Timecode name\n"
       "  -33            Use timecode at 33.3RPM (default)\n"
       "  -45            Use timecode at 45RPM\n"
-      "  -i <program>   Importer (default '%s')\n"
-      "  -s <program>   Library scanner (default '%s')\n"
-      "  -h             Display this message\n\n",
-      DEFAULT_IMPORTER, DEFAULT_SCANNER);
+      "  -c             Protect against certain operations while playing\n"
+      "  -u             Allow all operations when playing\n"
+      "  -i <program>   Importer (default '%s')\n\n",
+      DEFAULT_IMPORTER);
 
 #ifdef WITH_OSS
     fprintf(fd, "OSS device options:\n"
@@ -88,10 +108,15 @@ static void usage(FILE *fd)
       "  -j <name>      Create a JACK deck with the given name\n\n");
 #endif
 
+#ifdef WITH_ALSA
+    fprintf(fd, "MIDI control:\n"
+      "  -dicer <dev>   Novation Dicer\n\n");
+#endif
+
     fprintf(fd,
-      "Device options, -t, RPM options and -i apply to subsequent devices.\n"
-      "Option -s applies to subsequent directories.\n"
-      "Decks and audio directories can be specified multiple times.\n\n"
+      "The ordering of options is important. Options apply to subsequent\n"
+      "music libraries or decks, which can be given multiple times. See the\n"
+      "manual for details.\n\n"
       "Available timecodes (for use with -t):\n"
       "  serato_2a (default), serato_2b, serato_cd,\n"
       "  traktor_a, traktor_b, mixvibes_v2, mixvibes_7inch\n\n"
@@ -100,36 +125,63 @@ static void usage(FILE *fd)
 
 int main(int argc, char *argv[])
 {
-    int r, n, decks, oss_fragment, oss_buffers, rate, alsa_buffer;
-    char *endptr, *timecode, *importer, *scanner;
+    int r, n, priority;
+    const char *importer, *scanner, *geo;
+    char *endptr;
+    size_t nctl;
     double speed;
+    struct timecode_def *timecode;
+    bool protect, use_mlock;
 
-    struct device_t device[MAX_DECKS];
-    struct track_t track[MAX_DECKS];
-    struct player_t player[MAX_DECKS];
-    struct timecoder_t timecoder[MAX_DECKS];
+    struct controller ctl[2];
+    struct rt rt;
+    struct library library;
 
-    struct rig_t rig;
-    struct rt_t rt;
-    struct interface_t iface;
-    struct library_t library;
+#if defined WITH_OSS || WITH_ALSA
+    int rate;
+#endif
+
+#ifdef WITH_OSS
+    int oss_buffers, oss_fragment;
+#endif
+
+#ifdef WITH_ALSA
+    int alsa_buffer;
+#endif
 
     fprintf(stderr, "%s\n\n" NOTICE "\n\n", banner);
 
-    if (rig_init(&rig) == -1)
+    if (thread_global_init() == -1)
+        return -1;
+
+    if (rig_init() == -1)
         return -1;
     rt_init(&rt);
     library_init(&library);
 
-    decks = 0;
-    oss_fragment = DEFAULT_OSS_FRAGMENT;
-    oss_buffers = DEFAULT_OSS_BUFFERS;
-    rate = DEFAULT_RATE;
-    alsa_buffer = DEFAULT_ALSA_BUFFER;
+    ndeck = 0;
+    geo = "";
+    nctl = 0;
+    priority = DEFAULT_PRIORITY;
     importer = DEFAULT_IMPORTER;
     scanner = DEFAULT_SCANNER;
-    timecode = DEFAULT_TIMECODE;
+    timecode = NULL;
     speed = 1.0;
+    protect = false;
+    use_mlock = false;
+
+#if defined WITH_OSS || WITH_ALSA
+    rate = DEFAULT_RATE;
+#endif
+
+#ifdef WITH_ALSA
+    alsa_buffer = DEFAULT_ALSA_BUFFER;
+#endif
+
+#ifdef WITH_OSS
+    oss_fragment = DEFAULT_OSS_FRAGMENT;
+    oss_buffers = DEFAULT_OSS_BUFFERS;
+#endif
 
     /* Skip over command name */
 
@@ -189,6 +241,7 @@ int main(int argc, char *argv[])
             argc -= 2;
 #endif
 
+#if defined WITH_OSS || WITH_ALSA
         } else if (!strcmp(argv[0], "-r")) {
 
             /* Set sample rate for subsequence devices */
@@ -206,6 +259,7 @@ int main(int argc, char *argv[])
 
             argv += 2;
             argc -= 2;
+#endif
 
 #ifdef WITH_ALSA
         } else if (!strcmp(argv[0], "-m")) {
@@ -231,6 +285,9 @@ int main(int argc, char *argv[])
 		  !strcmp(argv[0], "-j"))
 	{
             unsigned int sample_rate;
+            struct deck *ld;
+            struct device *device;
+            struct timecoder *timecoder;
 
             /* Create a deck */
 
@@ -240,13 +297,18 @@ int main(int argc, char *argv[])
                 return -1;
             }
 
-            if (decks == MAX_DECKS) {
-                fprintf(stderr, "Too many decks (maximum %d); aborting.\n",
-                        MAX_DECKS);
+            if (ndeck == ARRAY_SIZE(deck)) {
+                fprintf(stderr, "Too many decks; aborting.\n");
                 return -1;
             }
 
-            fprintf(stderr, "Initialising deck %d (%s)...\n", decks, argv[1]);
+            fprintf(stderr, "Initialising deck %d (%s)...\n", ndeck, argv[1]);
+
+            ld = &deck[ndeck];
+            device = &ld->device;
+            timecoder = &ld->timecoder;
+            ld->importer = importer;
+            ld->protect = protect;
 
             /* Work out which device type we are using, and initialise
              * an appropriate device. */
@@ -255,18 +317,17 @@ int main(int argc, char *argv[])
 
 #ifdef WITH_OSS
             case 'd':
-                r = oss_init(&device[decks], argv[1], rate,
-                             oss_buffers, oss_fragment);
+                r = oss_init(device, argv[1], rate, oss_buffers, oss_fragment);
                 break;
 #endif
 #ifdef WITH_ALSA
             case 'a':
-                r = alsa_init(&device[decks], argv[1], rate, alsa_buffer);
+                r = alsa_init(device, argv[1], rate, alsa_buffer);
                 break;
 #endif
 #ifdef WITH_JACK
             case 'j':
-                r = jack_init(&device[decks], argv[1]);
+                r = jack_init(device, argv[1]);
                 break;
 #endif
             default:
@@ -280,28 +341,27 @@ int main(int argc, char *argv[])
 
 	    sample_rate = device_sample_rate(device);
 
-            if (timecoder_init(&timecoder[decks], timecode,
-                               speed, sample_rate) == -1)
-            {
-                return -1;
+            /* Default timecode decoder where none is specified */
+
+            if (timecode == NULL) {
+                timecode = timecoder_find_definition(DEFAULT_TIMECODE);
+                assert(timecode != NULL);
             }
 
-            if (rt_add_device(&rt, &device[decks]) == -1)
+            timecoder_init(timecoder, timecode, speed, sample_rate);
+
+            /* Connect up the elements to make an operational deck */
+
+            r = deck_init(ld, &rt);
+            if (r == -1)
                 return -1;
 
-            track_init(&track[decks], importer);
-            rig_add_track(&rig, &track[decks]);
+            /* Connect this deck to available controllers */
 
-            player_init(&player[decks], &track[decks]);
-            player_connect_timecoder(&player[decks], &timecoder[decks]);
+            for (n = 0; n < nctl; n++)
+                controller_add_deck(&ctl[n], &deck[ndeck]);
 
-            /* The timecoder and player are driven by requests from
-             * the audio device */
-
-            device_connect_timecoder(&device[decks], &timecoder[decks]);
-            device_connect_player(&device[decks], &player[decks]);
-
-            decks++;
+            ndeck++;
 
             argv += 2;
             argc -= 2;
@@ -315,7 +375,11 @@ int main(int argc, char *argv[])
                 return -1;
             }
 
-            timecode = argv[1];
+            timecode = timecoder_find_definition(argv[1]);
+            if (timecode == NULL) {
+                fprintf(stderr, "Timecode '%s' is not known.\n", argv[1]);
+                return -1;
+            }
 
             argv += 2;
             argc -= 2;
@@ -333,6 +397,62 @@ int main(int argc, char *argv[])
 
             argv++;
             argc--;
+
+        } else if (!strcmp(argv[0], "-c")) {
+
+            protect = true;
+
+            argv++;
+            argc--;
+
+        } else if (!strcmp(argv[0], "-u")) {
+
+            protect = false;
+
+            argv++;
+            argc--;
+
+        } else if (!strcmp(argv[0], "-k")) {
+
+            use_mlock = true;
+            track_use_mlock();
+
+            argv++;
+            argc--;
+
+        } else if (!strcmp(argv[0], "-q")) {
+
+            if (argc < 2) {
+                fprintf(stderr, "-q requires an integer argument.\n");
+                return -1;
+            }
+
+            priority = strtol(argv[1], &endptr, 10);
+            if (*endptr != '\0') {
+                fprintf(stderr, "-q requires an integer argument.\n");
+                return -1;
+            }
+
+            if (priority < 0) {
+                fprintf(stderr, "Priority (%d) must be zero or positive.\n",
+                        priority);
+                return -1;
+            }
+
+            argv += 2;
+            argc -= 2;
+
+        } else if (!strcmp(argv[0], "-g")) {
+
+            if (argc < 2) {
+                fprintf(stderr, "-g requires an argument.\n");
+                return -1;
+            }
+
+            geo = argv[1];
+
+            argv += 2;
+            argc -= 2;
 
         } else if (!strcmp(argv[0], "-i")) {
 
@@ -364,9 +484,7 @@ int main(int argc, char *argv[])
             argv += 2;
             argc -= 2;
 
-        } else if (!strcmp(argv[0], "-l") || !strcmp(argv[0], "-p")) {
-
-            bool sort;
+        } else if (!strcmp(argv[0], "-l")) {
 
             /* Load in a music library */
 
@@ -376,17 +494,37 @@ int main(int argc, char *argv[])
                 return -1;
             }
 
-            if (argv[0][1] == 'p') {
-                sort = false;
-            } else {
-                sort = true;
-            }
-
-            if (library_import(&library, sort, scanner, argv[1]) == -1)
+            if (library_import(&library, scanner, argv[1]) == -1)
                 return -1;
 
             argv += 2;
             argc -= 2;
+
+#ifdef WITH_ALSA
+        } else if (!strcmp(argv[0], "-dicer")) {
+
+            struct controller *c;
+
+            if (nctl == sizeof ctl) {
+                fprintf(stderr, "Too many controllers; aborting.\n");
+                return -1;
+            }
+
+            c = &ctl[nctl];
+
+            if (argc < 2) {
+                fprintf(stderr, "Dicer requires an ALSA device name.\n");
+                return -1;
+            }
+
+            if (dicer_init(c, &rt, argv[1]) == -1)
+                return -1;
+
+            nctl++;
+
+            argv += 2;
+            argc -= 2;
+#endif
 
         } else {
             fprintf(stderr, "'%s' argument is unknown; try -h.\n", argv[0]);
@@ -394,36 +532,53 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (decks == 0) {
+#ifdef WITH_ALSA
+    alsa_clear_config_cache();
+#endif
+
+    if (ndeck == 0) {
         fprintf(stderr, "You need to give at least one audio device to use "
                 "as a deck; try -h.\n");
         return -1;
     }
 
-    if (rt_start(&rt) == -1)
-        return -1;
-    if (interface_start(&iface, decks, player, timecoder, &library, &rig) == -1)
+    for (n = 0; n < nctl; n++) {
+        if (rt_add_controller(&rt, &ctl[n]) == -1)
+            return -1;
+    }
+
+    /* Order is important: launch realtime thread first, then mlock */
+
+    if (rt_start(&rt, priority) == -1)
         return -1;
 
-    if (rig_main(&rig) == -1)
+    if (use_mlock && mlockall(MCL_CURRENT) == -1) {
+        perror("mlockall");
+        return -1;
+    }
+
+    if (interface_start(&library, geo) == -1)
+        return -1;
+
+    if (rig_main() == -1)
         return -1;
 
     fprintf(stderr, "Exiting cleanly...\n");
 
-    interface_stop(&iface);
+    interface_stop();
     rt_stop(&rt);
 
-    for (n = 0; n < decks; n++) {
-        track_clear(&track[n]);
-        timecoder_clear(&timecoder[n]);
-        player_clear(&player[n]);
-        device_clear(&device[n]);
-    }
+    for (n = 0; n < ndeck; n++)
+        deck_clear(&deck[n]);
+
+    for (n = 0; n < nctl; n++)
+        controller_clear(&ctl[n]);
 
     timecoder_free_lookup();
     library_clear(&library);
     rt_clear(&rt);
-    rig_clear(&rig);
+    rig_clear();
+    thread_global_clear();
 
     fprintf(stderr, "Done.\n");
 

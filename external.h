@@ -17,13 +17,17 @@
  *
  */
 
-#ifndef INTERFACE_H
-#define INTERFACE_H
+/*
+ * Utility functions for launching external processes
+ */
 
-#include "deck.h"
-#include "library.h"
+#ifndef EXTERNAL_H
+#define EXTERNAL_H
 
-int interface_start(struct library *lib, const char *geo);
-void interface_stop();
+#include <stdarg.h>
+#include <unistd.h>
+
+pid_t fork_pipe(int *fd, const char *path, char *arg, ...);
+pid_t fork_pipe_nb(int *fd, const char *path, char *arg, ...);
 
 #endif

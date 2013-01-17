@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,79 +17,116 @@
  *
  */
 
+#include <assert.h>
 #include <stddef.h>
 
 #include "device.h"
+#include "player.h"
+#include "timecoder.h"
 
-
-void device_connect_timecoder(struct device_t *dv, struct timecoder_t *tc)
+void device_connect_timecoder(struct device *dv, struct timecoder *tc)
 {
     dv->timecoder = tc;
 }
 
-
-void device_connect_player(struct device_t *dv, struct player_t *pl)
+void device_connect_player(struct device *dv, struct player *pl)
 {
     dv->player = pl;
 }
 
+/*
+ * Return: the sample rate of the device in Hz
+ */
 
-/* Return the sample rate of the device in Hz */
-
-unsigned int device_sample_rate(struct device_t *dv)
+unsigned int device_sample_rate(struct device *dv)
 {
-    return dv->type->sample_rate(dv);
+    assert(dv->ops->sample_rate != NULL);
+    return dv->ops->sample_rate(dv);
 }
 
+/*
+ * Start the device inputting and outputting audio
+ */
 
-/* Start the device inputting and outputting audio */
-
-void device_start(struct device_t *dv)
+void device_start(struct device *dv)
 {
-    if (dv->type->start != NULL)
-        dv->type->start(dv);
+    if (dv->ops->start != NULL)
+        dv->ops->start(dv);
 }
 
+/*
+ * Stop the device
+ */
 
-/* Stop the device */
-
-void device_stop(struct device_t *dv)
+void device_stop(struct device *dv)
 {
-    if (dv->type->stop != NULL)
-        dv->type->stop(dv);
+    if (dv->ops->stop != NULL)
+        dv->ops->stop(dv);
 }
 
+/*
+ * Clear (destruct) the device. The corresponding constructor is
+ * specific to each particular audio system
+ */
 
-/* Clear (destruct) the device. The corresponding constructor is
- * specific to each particular audio system. */
-
-void device_clear(struct device_t *dv)
+void device_clear(struct device *dv)
 {
-    dv->type->clear(dv);
+    if (dv->ops->clear != NULL)
+        dv->ops->clear(dv);
 }
 
-
-/* Return file descriptors which should be watched for this device.
- * Do not return anything for callback-based audio systems. If this
- * function returns any file descriptors, there must be a handle()
- * function available.
+/*
+ * Get file descriptors which should be polled for this device
  *
- * Returns the number of pollfd filled, or -1 on error. */
+ * Do not return anything for callback-based audio systems. If the
+ * return value is > 0, there must be a handle() function available.
+ *
+ * Return: the number of pollfd filled, or -1 on error
+ */
 
-ssize_t device_pollfds(struct device_t *dv, struct pollfd *pe, size_t z)
+ssize_t device_pollfds(struct device *dv, struct pollfd *pe, size_t z)
 {
-    if (dv->type->pollfds)
-        return dv->type->pollfds(dv, pe, z);
+    if (dv->ops->pollfds != NULL)
+        return dv->ops->pollfds(dv, pe, z);
     else
         return 0;
 }
 
+/*
+ * Handle any available input or output on the device
+ *
+ * This function can be called when there is activity on any file
+ * descriptor, not specifically one returned by this device.
+ *
+ * Return: 0 on success, or -1 if an error occured
+ */
 
-/* Handle any available input or output on the device. This function
- * is called when there is activity on any fd given by pollfds() for
- * any devices in the system. */
-
-int device_handle(struct device_t *dv)
+int device_handle(struct device *dv)
 {
-    return dv->type->handle(dv);
+    assert(dv->ops->handle != NULL);
+    return dv->ops->handle(dv);
+}
+
+/*
+ * Send audio from a device for processing
+ *
+ * Pre: buffer pcm contains n stereo samples
+ */
+
+void device_submit(struct device *dv, signed short *pcm, size_t n)
+{
+    assert(dv->timecoder != NULL);
+    timecoder_submit(dv->timecoder, pcm, n);
+}
+
+/*
+ * Collect audio from the processing to send to a device
+ *
+ * Post: buffer pcm is filled with n stereo samples
+ */
+
+void device_collect(struct device *dv, signed short *pcm, size_t n)
+{
+    assert(dv->player != NULL);
+    player_collect(dv->player, pcm, n);
 }

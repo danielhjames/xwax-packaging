@@ -1,5 +1,46 @@
-v0.9 (work in progress)
+v1.3 (work in progress)
 -----------------------
+
+* Tempo (BPM) field, and sorting and changing of sort modes
+* Allow initial X window size and position to be set by the user
+* Makefile modifications for packagers
+* Report errors to the main interface
+
+Acknowledgements: Engine, Lukas Fleischer, Daniel Holbach, Matej Laitl
+
+v1.2 (2012-03-23)
+-----------------
+
+* Scan directories only for known file extensions
+* Support Novation 'Dicer' controller
+* Cue points, including 'punch' feature
+* Extra protection against skips: optionally lock memory into RAM
+
+Acknowledgements: Novation, Olivier Gauthier, Christoph Krapp, Mitchell Smith
+
+v1.1 (2012-01-30)
+-----------------
+
+* Bug fix: incorrect display of track time remaining
+* Instant loading of duplicate tracks
+* Optionally protect decks during playback
+* Improvements to music selector
+* Increase speed building look-up tables
+
+v1.0 (2011-08-01)
+-----------------
+
+* Changing of timecode at runtime
+* Improved parsing of vinyl track numbers
+* Bug fix: affecting multiple decks with different sample rates
+* Optimise timecode error checking during scratching
+* Require realtime priority; don't start without it
+* Internal restructuring
+
+Acknowledgements: Robert Flechtner, Daniel Holbach, Lukas Fleischer
+
+v0.9 (2011-04-19)
+-----------------
 
 * Internal cleanups
 * Filtering of duplicate entries in the record library

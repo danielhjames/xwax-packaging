@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -27,23 +27,21 @@
 #include <sys/soundcard.h>
 
 #include "oss.h"
-#include "timecoder.h"
-#include "player.h"
 
 #define FRAME 32 /* maximum read size */
 
 
-struct oss_t {
+struct oss {
     int fd;
     struct pollfd *pe;
     unsigned int rate;
 };
 
 
-static void clear(struct device_t *dv)
+static void clear(struct device *dv)
 {
     int r;
-    struct oss_t *oss = (struct oss_t*)dv->local;
+    struct oss *oss = (struct oss*)dv->local;
 
     r = close(oss->fd);
     if (r == -1) {
@@ -99,11 +97,11 @@ static int pull(int fd, signed short *pcm, int samples)
 }
 
 
-static int handle(struct device_t *dv)
+static int handle(struct device *dv)
 {
     signed short pcm[FRAME * DEVICE_CHANNELS];
     int samples;
-    struct oss_t *oss = (struct oss_t*)dv->local;
+    struct oss *oss = (struct oss*)dv->local;
 
     /* Check input buffer for recording */
 
@@ -111,27 +109,14 @@ static int handle(struct device_t *dv)
         samples = pull(oss->fd, pcm, FRAME);
         if (samples == -1)
             return -1;
-        
-        if (dv->timecoder)
-            timecoder_submit(dv->timecoder, pcm, samples);
+        device_submit(dv, pcm, samples);
     }
 
     /* Check the output buffer for playback */
     
     if (oss->pe->revents & POLLOUT) {
-
-        /* Always push some audio to the soundcard, even if it means
-         * silence. This has shown itself to be much more reliable
-         * than starting and stopping -- which can affect other
-         * devices in the system. */
-        
-        if (dv->player)
-            player_collect(dv->player, pcm, FRAME, oss->rate);
-        else
-            memset(pcm, 0, FRAME * DEVICE_CHANNELS * sizeof(short));
-        
+        device_collect(dv, pcm, FRAME);
         samples = push(oss->fd, pcm, FRAME);
-        
         if (samples == -1)
             return -1;
     }
@@ -140,9 +125,9 @@ static int handle(struct device_t *dv)
 }
 
 
-static ssize_t pollfds(struct device_t *dv, struct pollfd *pe, size_t z)
+static ssize_t pollfds(struct device *dv, struct pollfd *pe, size_t z)
 {
-    struct oss_t *oss = (struct oss_t*)dv->local;
+    struct oss *oss = (struct oss*)dv->local;
 
     if (z < 1)
         return -1;
@@ -155,29 +140,27 @@ static ssize_t pollfds(struct device_t *dv, struct pollfd *pe, size_t z)
 }
 
 
-static unsigned int sample_rate(struct device_t *dv)
+static unsigned int sample_rate(struct device *dv)
 {
-    struct oss_t *oss = (struct oss_t*)dv->local;
+    struct oss *oss = (struct oss*)dv->local;
 
     return oss->rate;
 }
 
 
-static struct device_type_t oss_type = {
+static struct device_ops oss_ops = {
     .pollfds = pollfds,
     .handle = handle,
     .sample_rate = sample_rate,
-    .start = NULL,
-    .stop = NULL,
     .clear = clear
 };
 
 
-int oss_init(struct device_t *dv, const char *filename, unsigned int rate,
+int oss_init(struct device *dv, const char *filename, unsigned int rate,
 	     unsigned short buffers, unsigned short fragment)
 {
     int p, fd;
-    struct oss_t *oss;
+    struct oss *oss;
    
     fd = open(filename, O_RDWR, 0);
     if (fd == -1) {
@@ -227,19 +210,18 @@ int oss_init(struct device_t *dv, const char *filename, unsigned int rate,
         return -1;
     }
 
-    dv->local = malloc(sizeof(struct oss_t));
-    if (!dv->local) {
+    oss = malloc(sizeof(struct oss));
+    if (oss == NULL) {
         perror("malloc");
         goto fail;
     }
-
-    oss = (struct oss_t*)dv->local;
 
     oss->fd = fd;
     oss->pe = NULL;
     oss->rate = rate;
 
-    dv->type = &oss_type;
+    dv->local = oss;
+    dv->ops = &oss_ops;
 
     return 0;
 

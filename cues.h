@@ -17,13 +17,28 @@
  *
  */
 
-#ifndef INTERFACE_H
-#define INTERFACE_H
+#ifndef CUES_H
+#define CUES_H
 
-#include "deck.h"
-#include "library.h"
+#include <math.h>
 
-int interface_start(struct library *lib, const char *geo);
-void interface_stop();
+#define MAX_CUES 16
+#define CUE_UNSET (HUGE_VAL)
+
+/*
+ * A set of cue points
+ */
+
+struct cues {
+    double position[MAX_CUES];
+};
+
+void cues_reset(struct cues *q);
+
+void cues_unset(struct cues *q, unsigned int label);
+void cues_set(struct cues *q, unsigned int label, double position);
+double cues_get(const struct cues *q, unsigned int label);
+double cues_prev(const struct cues *q, double current);
+double cues_next(const struct cues *q, double current);
 
 #endif

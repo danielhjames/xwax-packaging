@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -17,28 +17,16 @@
  *
  */
 
-#ifndef IMPORT_H
-#define IMPORT_H
-
-#include <sys/types.h>
-
 /*
- * State information for an import operation -- data is piped from
- * an external process into a track
+ * General helper functions for threads
  */
 
-struct import_t {
-    int fd;
-    pid_t pid;
-    struct pollfd *pe;
-    struct track_t *track;
-};
+#ifndef THREAD_H
+#define THREAD_H
 
-int import_start(struct import_t *im, struct track_t *track,
-                 const char *cmd, const char *path);
-void import_pollfd(struct import_t *im, struct pollfd *pe);
-int import_handle(struct import_t *im);
-void import_terminate(struct import_t *im);
-void import_stop(const struct import_t *im);
+int thread_global_init(void);
+void thread_global_clear(void);
+void thread_to_realtime(void);
+void rt_not_allowed();
 
 #endif

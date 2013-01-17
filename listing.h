@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -22,26 +22,33 @@
 
 #include <stddef.h>
 
-struct record_t {
+#define SORT_ARTIST   0
+#define SORT_BPM      1
+#define SORT_PLAYLIST 2
+#define SORT_END      3
+
+struct record {
     char *pathname, *artist, *title;
+    double bpm; /* or 0.0 if not known */
 };
 
 /* Listing points to records, but does not manage those pointers */
 
-struct listing_t {
-    struct record_t **record;
+struct listing {
+    struct record **record;
     size_t size, entries;
 };
 
-void listing_init(struct listing_t *ls);
-void listing_clear(struct listing_t *ls);
-void listing_blank(struct listing_t *ls);
-int listing_add(struct listing_t *li, struct record_t *lr);
-int listing_copy(const struct listing_t *src, struct listing_t *dest);
-int listing_match(struct listing_t *src, struct listing_t *dest,
+void listing_init(struct listing *ls);
+void listing_clear(struct listing *ls);
+void listing_blank(struct listing *ls);
+int listing_add(struct listing *li, struct record *lr);
+int listing_copy(const struct listing *src, struct listing *dest);
+int listing_match(struct listing *src, struct listing *dest,
 		  const char *match);
-struct record_t* listing_insert(struct listing_t *ls, struct record_t *item);
-void listing_debug(struct listing_t *ls);
-void listing_sort(struct listing_t *ls);
+struct record* listing_insert(struct listing *ls, struct record *item,
+                              int sort);
+size_t listing_find(struct listing *ls, struct record *item, int sort);
+void listing_debug(struct listing *ls);
 
 #endif

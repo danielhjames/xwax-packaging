@@ -17,32 +17,39 @@
  *
  */
 
-#ifndef LIBRARY_H
-#define LIBRARY_H
+#ifndef CONTROLLER_H
+#define CONTROLLER_H
 
 #include <stdbool.h>
-#include <stddef.h>
+#include <stdlib.h>
 
-#include "listing.h"
+struct deck;
 
-/* A single crate of records */
+/*
+ * Base state of a 'controller', which is a MIDI controller or HID
+ * device used to control the program
+ */
 
-struct crate {
-    bool is_fixed, is_ordered;
-    char *name;
-    struct listing by_artist, by_bpm, by_order;
+struct controller {
+    bool fault;
+    void *local;
+    struct controller_ops *ops;
 };
 
-/* The complete music library, which consists of multiple crates */
+/*
+ * Functions which must be implemented for a controller
+ */
 
-struct library {
-    struct crate all, **crate;
-    size_t crates;
+struct controller_ops {
+    int (*add_deck)(struct controller *c, struct deck *deck);
+    int (*realtime)(struct controller *c);
+    void (*clear)(struct controller *c);
 };
 
-int library_init(struct library *li);
-void library_clear(struct library *li);
+void controller_init(struct controller *c, struct controller_ops *t);
+void controller_clear(struct controller *c);
 
-int library_import(struct library *lib, const char *scan, const char *path);
+void controller_add_deck(struct controller *c, struct deck *d);
+void controller_handle(struct controller *c);
 
 #endif

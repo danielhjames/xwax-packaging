@@ -17,13 +17,25 @@
  *
  */
 
-#ifndef INTERFACE_H
-#define INTERFACE_H
+/*
+ * Implement a global one-line status console
+ */
 
-#include "deck.h"
-#include "library.h"
+#ifndef STATUS_H
+#define STATUS_H
 
-int interface_start(struct library *lib, const char *geo);
-void interface_stop();
+#include <stdarg.h>
+
+#define STATUS_VERBOSE 0
+#define STATUS_INFO    1
+#define STATUS_ERROR   2
+
+const char* status(void);
+int status_level(void);
+
+void status_set(int level, const char *s);
+void status_printf(int level, const char *s, ...);
+
+void status_notify(void (*f)(void));
 
 #endif

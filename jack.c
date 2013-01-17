@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -18,31 +18,29 @@
  */
 
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <jack/jack.h>
 
 #include "device.h"
 #include "jack.h"
-#include "player.h"
-#include "timecoder.h"
 
-#define MAX_DECKS 4
 #define MAX_BLOCK 512 /* samples */
 #define SCALE 32768
 
 
-struct jack_t {
-    int started;
+struct jack {
+    bool started;
     jack_port_t *input_port[DEVICE_CHANNELS],
         *output_port[DEVICE_CHANNELS];
 };
 
 static jack_client_t *client = NULL;
-static int rate,
-    decks = 0,
-    started = 0;
-static struct device_t *device[MAX_DECKS];
+static unsigned rate,
+    ndeck = 0,
+    nstarted = 0;
+static struct device *device[4];
 
 
 /* Interleave samples from a set of JACK buffers into a local buffer */
@@ -80,12 +78,15 @@ static void uninterleave(jack_default_audio_sample_t *jbuf[],
 /* Process the given number of frames of audio on input and output
  * of the given JACK device */
 
-static void process_deck(struct device_t *dv, jack_nframes_t nframes)
+static void process_deck(struct device *dv, jack_nframes_t nframes)
 {
     int n;
     jack_default_audio_sample_t *in[DEVICE_CHANNELS], *out[DEVICE_CHANNELS];
     jack_nframes_t remain;
-    struct jack_t *jack = (struct jack_t*)dv->local;
+    struct jack *jack = (struct jack*)dv->local;
+
+    assert(dv->timecoder != NULL);
+    assert(dv->player != NULL);
 
     for (n = 0; n < DEVICE_CHANNELS; n++) {
         in[n] = jack_port_get_buffer(jack->input_port[n], nframes);
@@ -110,12 +111,11 @@ static void process_deck(struct device_t *dv, jack_nframes_t nframes)
         /* Timecode input */
 
         interleave(buf, in, block);
-        if (dv->timecoder)
-            timecoder_submit(dv->timecoder, buf, block);
+        device_submit(dv, buf, block);
 
         /* Audio output -- handle in the same loop for finer granularity */
 
-        player_collect(dv->player, buf, block, rate);
+        device_collect(dv, buf, block);
         uninterleave(out, buf, block);
 
 	remain -= block;
@@ -128,11 +128,11 @@ static void process_deck(struct device_t *dv, jack_nframes_t nframes)
 
 static int process_callback(jack_nframes_t nframes, void *local)
 {
-    int n;
-    struct jack_t *jack;
+    size_t n;
+    struct jack *jack;
 
-    for (n = 0; n < decks; n++) {
-        jack = (struct jack_t*)device[n]->local;
+    for (n = 0; n < ndeck; n++) {
+        jack = (struct jack*)device[n]->local;
         if (jack->started)
             process_deck(device[n], nframes);
     }
@@ -195,10 +195,10 @@ static int stop_jack_client(void)
 
 /* Register the JACK ports needed for a single deck */
 
-static int register_ports(struct jack_t *jack, const char *name)
+static int register_ports(struct jack *jack, const char *name)
 {
-    int n;
-    const char channel[] = { 'L', 'R' };
+    size_t n;
+    static const char channel[] = { 'L', 'R' };
     char port_name[32];
 
     assert(DEVICE_CHANNELS == 2);
@@ -225,7 +225,7 @@ static int register_ports(struct jack_t *jack, const char *name)
 
 /* Return the sample rate */
 
-static unsigned int sample_rate(struct device_t *dv)
+static unsigned int sample_rate(struct device *dv)
 {
     return rate; /* the same rate is used for all decks */
 }
@@ -233,34 +233,37 @@ static unsigned int sample_rate(struct device_t *dv)
 
 /* Start audio rolling on this deck */
 
-static void start(struct device_t *dv)
+static void start(struct device *dv)
 {
-    struct jack_t *jack = (struct jack_t*)dv->local;
+    struct jack *jack = (struct jack*)dv->local;
+
+    assert(dv->timecoder != NULL);
+    assert(dv->player != NULL);
 
     /* On the first call to start, start audio rolling for all decks */
 
-    if (started == 0) {
+    if (nstarted == 0) {
         if (jack_activate(client) != 0)
             abort();
     }
 
-    started++;
-    jack->started = 1;
+    nstarted++;
+    jack->started = true;
 }
 
 
 /* Stop audio rolling on this deck */
 
-static void stop(struct device_t *dv)
+static void stop(struct device *dv)
 {
-    struct jack_t *jack = (struct jack_t*)dv->local;
+    struct jack *jack = (struct jack*)dv->local;
 
-    jack->started = 0;
-    started--;
+    jack->started = false;
+    nstarted--;
 
     /* On the final stop call, stop JACK rolling */
 
-    if (started == 0) {
+    if (nstarted == 0) {
         if (jack_deactivate(client) != 0)
             abort();
     }
@@ -269,9 +272,9 @@ static void stop(struct device_t *dv)
 
 /* Close JACK deck and any allocations */
 
-static void clear(struct device_t *dv)
+static void clear(struct device *dv)
 {
-    struct jack_t *jack = (struct jack_t*)dv->local;
+    struct jack *jack = (struct jack*)dv->local;
     int n;
 
     /* Unregister ports */
@@ -288,25 +291,23 @@ static void clear(struct device_t *dv)
     /* Remove this from the global list, so that potentially xwax could
      * continue to run even if a deck is removed */
 
-    for (n = 0; n < decks; n++) {
+    for (n = 0; n < ndeck; n++) {
         if (device[n] == dv)
             break;
     }
-    assert(n != decks);
+    assert(n != ndeck);
 
-    if (decks == 1) { /* this is the last remaining deck */
+    if (ndeck == 1) { /* this is the last remaining deck */
         stop_jack_client();
-        decks = 0;
+        ndeck = 0;
     } else {
-        device[n] = device[decks - 1]; /* compact the list */
-        decks--;
+        device[n] = device[ndeck - 1]; /* compact the list */
+        ndeck--;
     }
 }
 
 
-static struct device_type_t jack_type = {
-    .pollfds = NULL,
-    .handle = NULL, /* done via JACK's own callbacks */
+static struct device_ops jack_ops = {
     .sample_rate = sample_rate,
     .start = start,
     .stop = stop,
@@ -317,9 +318,9 @@ static struct device_type_t jack_type = {
 /* Initialise a new JACK deck, creating a new JACK client if required,
  * and the approporiate input and output ports */
 
-int jack_init(struct device_t *dv, const char *name)
+int jack_init(struct device *dv, const char *name)
 {
-    struct jack_t *jack;
+    struct jack *jack;
 
     /* If this is the first JACK deck, initialise the global JACK services */
 
@@ -328,22 +329,22 @@ int jack_init(struct device_t *dv, const char *name)
             return -1;
     }
 
-    jack = malloc(sizeof(struct jack_t));
-    if (!jack) {
+    jack = malloc(sizeof(struct jack));
+    if (jack == NULL) {
         perror("malloc");
         return -1;
     }
 
-    jack->started = 0;
+    jack->started = false;
     if (register_ports(jack, name) == -1)
         goto fail;
 
     dv->local = jack;
-    dv->type = &jack_type;
+    dv->ops = &jack_ops;
 
-    assert(decks < MAX_DECKS);
-    device[decks] = dv;
-    decks++;
+    assert(ndeck < sizeof device);
+    device[ndeck] = dv;
+    ndeck++;
 
     return 0;
 

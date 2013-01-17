@@ -17,13 +17,12 @@
  *
  */
 
-#ifndef INTERFACE_H
-#define INTERFACE_H
+#ifndef DICER_H
+#define DICER_H
 
-#include "deck.h"
-#include "library.h"
+struct controller;
+struct rt;
 
-int interface_start(struct library *lib, const char *geo);
-void interface_stop();
+int dicer_init(struct controller *c, struct rt *rt, const char *hw);
 
 #endif
