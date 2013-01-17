@@ -1,3 +1,24 @@
+xwax (1.3-1) unstable; urgency=low
+
+  * New upstream release. (Closes: #637207)
+  * Moved to Debian Multimedia Maintainers team.
+  * debian/patches/01-fix-libexec-dir-in-makefile.patch: dropped.
+  * debian/patches/02-remove-redundant-copyright-notice.patch: dropped,
+    override dh_install instead.
+  * debian/control:
+    - use [linux-any]. (Closes: #634480)
+    - bump Standards-Version to 3.9.2.
+    - bump debhelper Build-Depends to 7.0.50~.
+    - Changed maintainer to Debian Multimedia Maintainers.
+  * debian/rules:
+    - port to dh7.
+    - install upstream changelog.
+    - set EXECDIR.
+    - move clean bits to debian/clean.
+  * debian/copyright: use DEP 5.
+
+ -- Mitchell Smith <mjs@mjsprojects.net>  Thu, 17 Jan 2013 10:17:03 +1000
+
 xwax (0.9-2) unstable; urgency=low
 
   * Removed quilt related stuff from debian/rules

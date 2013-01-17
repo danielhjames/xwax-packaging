@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
 {
     const char *scan;
     size_t n;
-    struct library_t lib;
+    struct library lib;
 
     if (argc < 3) {
         fprintf(stderr, "usage: %s <scan> <path> [...]\n", argv[0]);
@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
         return -1;
 
     for (n = 2; n < argc; n++) {
-        if (library_import(&lib, true, scan, argv[n]) == -1)
+        if (library_import(&lib, scan, argv[n]) == -1)
             return -1;
     }
 

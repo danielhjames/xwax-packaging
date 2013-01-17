@@ -1,14 +1,8 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
-# Sample debian/rules that uses debhelper.
-# This file was originally written by Joey Hess and Craig Small.
-# As a special exception, when this file is copied by dh-make into a
-# dh-make output file, you may use that output file without restriction.
-# This special exception was added by Craig Small in version 0.37 of dh-make.
 
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
-
 
 # These are used for cross-compiling and for saving the configure script
 # from having to guess our platform (since we know it already)
@@ -20,83 +14,25 @@ else
 CROSS= --build $(DEB_BUILD_GNU_TYPE)
 endif
 
+%:
+	dh $@
 
-
-config.status: configure
-	dh_testdir
-	# Add here commands to configure the package.
+override_dh_auto_configure:
 ifneq ($(DEB_HOST_ARCH_OS),linux)
-	 ./configure --prefix /usr --enable-oss
+	./configure --prefix /usr --enable-oss
 else
-	 ./configure --prefix /usr --enable-alsa
+	./configure --prefix /usr --enable-alsa
 endif
 
-build: build-stamp
+override_dh_auto_build:
+	$(MAKE) PREFIX=/usr EXECDIR=/usr/share/xwax
 
-build-stamp:  config.status 
-	dh_testdir
+override_dh_auto_install:
+	$(MAKE) PREFIX=$(CURDIR)/debian/xwax/usr EXECDIR=$(CURDIR)/debian/xwax/usr/share/xwax install
 
-	# Add here commands to compile the package.
-	$(MAKE)
-	#docbook-to-man debian/xwax.sgml > xwax.1
+override_dh_install:
+	dh_install
+	rm -f $(CURDIR)/debian/xwax/usr/share/doc/xwax/COPYING
 
-	touch $@
-
-clean: 
-	dh_testdir
-	dh_testroot
-	rm -f build-stamp 
-
-	# Add here commands to clean up after the build process.
-	[ ! -f Makefile ] || $(MAKE) clean
-	rm -f config.sub config.guess
-
-	dh_clean 
-
-install: build
-	dh_testdir
-	dh_testroot
-	dh_prep 
-	dh_installdirs
-
-	# Add here commands to install the package into debian/xwax.
-	$(MAKE) PREFIX=$(CURDIR)/debian/xwax/usr install
-
-
-# Build architecture-independent files here.
-binary-indep: build install
-# We have nothing to do by default.
-
-# Build architecture-dependent files here.
-binary-arch: build install
-	dh_testdir
-	dh_testroot
-	dh_installchangelogs CHANGES
-	dh_installdocs
-	dh_installexamples
-#	dh_install
-#	dh_installmenu
-#	dh_installdebconf	
-#	dh_installlogrotate
-#	dh_installemacsen
-#	dh_installpam
-#	dh_installmime
-#	dh_python
-#	dh_installinit
-#	dh_installcron
-#	dh_installinfo
-	dh_installman
-	dh_link
-	dh_strip
-	dh_compress
-	dh_fixperms
-#	dh_perl
-#	dh_makeshlibs
-	dh_installdeb
-	dh_shlibdeps
-	dh_gencontrol
-	dh_md5sums
-	dh_builddeb
-
-binary: binary-indep binary-arch
-.PHONY: build clean binary-indep binary-arch binary install 
+override_dh_installchangelogs:
+	dh_installchangelogs -k CHANGES

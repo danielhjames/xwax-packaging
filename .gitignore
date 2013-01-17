@@ -1,1 +1,13 @@
-/.pc
+TAGS
+xwax
+test-cues
+test-library
+test-midi
+test-status
+test-timecoder
+test-track
+*.o
+*.d
+.config
+.version
+dist

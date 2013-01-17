@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,65 +20,57 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/poll.h>
 
+#include "list.h"
+#include "mutex.h"
+#include "realtime.h"
 #include "rig.h"
-#include "track.h"
-
-#define MAX_POLLFDS 3
 
 #define EVENT_WAKE 0
 #define EVENT_QUIT 1
 
-int rig_init(struct rig_t *rig)
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*x))
+
+static int event[2]; /* pipe to wake up service thread */
+static struct list tracks = LIST_INIT(tracks);
+mutex lock;
+
+int rig_init()
 {
     /* Create a pipe which will be used to wake us from other threads */
 
-    if (pipe(rig->event) == -1) {
+    if (pipe(event) == -1) {
         perror("pipe");
         return -1;
     }
 
-    if (fcntl(rig->event[0], F_SETFL, O_NONBLOCK) == -1) {
+    if (fcntl(event[0], F_SETFL, O_NONBLOCK) == -1) {
         perror("fcntl");
-        if (close(rig->event[1]) == -1)
+        if (close(event[1]) == -1)
             abort();
-        if (close(rig->event[0]) == -1)
+        if (close(event[0]) == -1)
             abort();
         return -1;
     }
 
-    rig->ntrack = 0;
+    mutex_init(&lock);
 
     return 0;
 }
 
-void rig_clear(struct rig_t *rig)
+void rig_clear()
 {
-    if (close(rig->event[0]) == -1)
+    mutex_clear(&lock);
+
+    if (close(event[0]) == -1)
         abort();
-    if (close(rig->event[1]) == -1)
+    if (close(event[1]) == -1)
         abort();
-}
-
-/*
- * Add a track to be monitored
- *
- * This function is not thread or signal safe to rig_main() as
- * is only used as part of initialisation.
- *
- * Pre: less than MAX_TRACKS tracks already added to this rig
- */
-
-void rig_add_track(struct rig_t *rig, struct track_t *track)
-{
-    assert(rig->ntrack < MAX_TRACKS);
-
-    rig->track[rig->ntrack] = track;
-    rig->ntrack++;
 }
 
 /*
@@ -94,34 +86,41 @@ void rig_add_track(struct rig_t *rig, struct track_t *track)
  * I/O), the rig will also be responsible for them.
  */
 
-int rig_main(struct rig_t *rig)
+int rig_main()
 {
-    int r;
-    size_t n;
-    struct pollfd pt[MAX_POLLFDS], *pe;
+    struct pollfd pt[4];
+    const struct pollfd *px = pt + ARRAY_SIZE(pt);
 
-    assert(rig->ntrack <= MAX_POLLFDS);
+    /* Monitor event pipe from external threads */
+
+    pt[0].fd = event[0];
+    pt[0].revents = 0;
+    pt[0].events = POLLIN;
+
+    mutex_lock(&lock);
 
     for (;;) { /* exit via EVENT_QUIT */
-        pe = pt;
+        int r;
+        struct pollfd *pe;
+        struct track *track, *xtrack;
 
-        /* ppoll() is not widely available, so use a pipe between this
-         * thread and the outside. A single byte wakes up poll() to
-         * inform us that new file descriptors need to be polled */
+        pe = &pt[1];
 
-        pe->fd = rig->event[0];
-        pe->revents = 0;
-        pe->events = POLLIN;
-        pe++;
+        /* Do our best if we run out of poll entries */
 
-        /* Fetch file descriptors to monitor from each track */
+        list_for_each(track, &tracks, rig) {
+            if (pe == px)
+                break;
+            track_pollfd(track, pe);
+            pe++;
+        }
 
-        for (n = 0; n < rig->ntrack; n++)
-            pe += track_pollfd(rig->track[n], pe);
+        mutex_unlock(&lock);
 
         r = poll(pt, pe - pt, -1);
         if (r == -1) {
             if (errno == EINTR) {
+                mutex_lock(&lock);
                 continue;
             } else {
                 perror("poll");
@@ -133,10 +132,10 @@ int rig_main(struct rig_t *rig)
 
         if (pt[0].revents != 0) {
             for (;;) {
-                char event;
+                char e;
                 size_t z;
 
-                z = read(rig->event[0], &event, 1);
+                z = read(event[0], &e, 1);
                 if (z == -1) {
                     if (errno == EAGAIN) {
                         break;
@@ -146,7 +145,7 @@ int rig_main(struct rig_t *rig)
                     }
                 }
 
-                switch (event) {
+                switch (e) {
                 case EVENT_WAKE:
                     break;
 
@@ -159,10 +158,10 @@ int rig_main(struct rig_t *rig)
             }
         }
 
-        /* Do any reading and writing on all tracks */
+        mutex_lock(&lock);
 
-        for (n = 0; n < rig->ntrack; n++)
-            track_handle(rig->track[n]);
+        list_for_each_safe(track, xtrack, &tracks, rig)
+            track_handle(track);
     }
  finish:
 
@@ -173,29 +172,44 @@ int rig_main(struct rig_t *rig)
  * Post a simple event into the rig event loop
  */
 
-static int post_event(struct rig_t *rig, char event)
+static int post_event(char e)
 {
-    if (write(rig->event[1], &event, 1) == -1) {
+    rt_not_allowed();
+
+    if (write(event[1], &e, 1) == -1) {
         perror("write");
         return -1;
     }
+
     return 0;
-}
-
-/*
- * Wake up the rig to inform it that the poll table has changed
- */
-
-int rig_awaken(struct rig_t *rig)
-{
-    return post_event(rig, EVENT_WAKE);
 }
 
 /*
  * Ask the rig to exit from another thread or signal handler
  */
 
-int rig_quit(struct rig_t *rig)
+int rig_quit()
 {
-    return post_event(rig, EVENT_QUIT);
+    return post_event(EVENT_QUIT);
+}
+
+void rig_lock(void)
+{
+    mutex_lock(&lock);
+}
+
+void rig_unlock(void)
+{
+    mutex_unlock(&lock);
+}
+
+/*
+ * Add a track to be handled until import has completed
+ */
+
+void rig_post_track(struct track *t)
+{
+    track_get(t);
+    list_add(&t->rig, &tracks);
+    post_event(EVENT_WAKE);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -27,23 +27,22 @@
 
 /* A single crate of records */
 
-struct crate_t {
-    bool is_fixed;
+struct crate {
+    bool is_fixed, is_ordered;
     char *name;
-    struct listing_t listing;
+    struct listing by_artist, by_bpm, by_order;
 };
 
 /* The complete music library, which consists of multiple crates */
 
-struct library_t {
-    struct crate_t all, **crate;
+struct library {
+    struct crate all, **crate;
     size_t crates;
 };
 
-int library_init(struct library_t *li);
-void library_clear(struct library_t *li);
+int library_init(struct library *li);
+void library_clear(struct library *li);
 
-int library_import(struct library_t *lib, bool sort,
-                   const char *scan, const char *path);
+int library_import(struct library *lib, const char *scan, const char *path);
 
 #endif

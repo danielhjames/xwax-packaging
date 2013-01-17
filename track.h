@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,45 +20,46 @@
 #ifndef TRACK_H
 #define TRACK_H
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <sys/poll.h>
 #include <sys/types.h>
 
-#include "import.h"
+#include "list.h"
 
 #define TRACK_CHANNELS 2
-#define TRACK_RATE 44100
 
 #define TRACK_MAX_BLOCKS 64
 #define TRACK_BLOCK_SAMPLES (2048 * 1024)
 #define TRACK_PPM_RES 64
 #define TRACK_OVERVIEW_RES 2048
 
-struct track_block_t {
+struct track_block {
     signed short pcm[TRACK_BLOCK_SAMPLES * TRACK_CHANNELS];
     unsigned char ppm[TRACK_BLOCK_SAMPLES / TRACK_PPM_RES],
         overview[TRACK_BLOCK_SAMPLES / TRACK_OVERVIEW_RES];
 };
 
-struct track_t {
+struct track {
+    struct list tracks;
+    unsigned int refcount;
     int rate;
-    pthread_mutex_t mx;
 
     /* pointers to external data */
    
-    const char *importer, /* path to import script */
-        *artist, *title;
+    const char *importer, *path;
     
     size_t bytes; /* loaded in */
-    int length, /* track length in samples */
+    unsigned int length, /* track length in samples */
         blocks; /* number of blocks allocated */
-    struct track_block_t *block[TRACK_MAX_BLOCKS];
+    struct track_block *block[TRACK_MAX_BLOCKS];
 
     /* State of audio import */
 
-    bool importing, has_poll;
-    struct import_t import;
+    struct list rig;
+    pid_t pid;
+    int fd;
+    struct pollfd *pe;
+    bool terminated;
 
     /* Current value of audio meters when loading */
     
@@ -66,51 +67,50 @@ struct track_t {
     unsigned int overview;
 };
 
-void track_init(struct track_t *tr, const char *importer);
-void track_clear(struct track_t *tr);
+void track_use_mlock(void);
 
-/* Functions used by the import operation */
+/* Tracks are dynamically allocated and reference counted */
 
-void track_empty(struct track_t *tr);
-void* track_access_pcm(struct track_t *tr, size_t *len);
-void track_commit(struct track_t *tr, size_t len);
+struct track* track_get_by_import(const char *importer, const char *path);
+struct track* track_get_empty(void);
+void track_get(struct track *t);
+void track_put(struct track *t);
 
 /* Functions used by the rig and main thread */
 
-size_t track_pollfd(struct track_t *tr, struct pollfd *pe);
-void track_handle(struct track_t *tr);
-int track_import(struct track_t *tr, const char *path);
+void track_pollfd(struct track *tr, struct pollfd *pe);
+void track_handle(struct track *tr);
 
 /* Return true if the track importer is running, otherwise false */
 
-static inline bool track_is_importing(struct track_t *tr)
+static inline bool track_is_importing(struct track *tr)
 {
-    return tr->importing;
+    return tr->pid != 0;
 }
 
 /* Return the pseudo-PPM meter value for the given sample */
 
-static inline unsigned char track_get_ppm(struct track_t *tr, int s)
+static inline unsigned char track_get_ppm(struct track *tr, int s)
 {
-    struct track_block_t *b;
+    struct track_block *b;
     b = tr->block[s / TRACK_BLOCK_SAMPLES];
     return b->ppm[(s % TRACK_BLOCK_SAMPLES) / TRACK_PPM_RES];
 }
 
 /* Return the overview meter value for the given sample */
 
-static inline unsigned char track_get_overview(struct track_t *tr, int s)
+static inline unsigned char track_get_overview(struct track *tr, int s)
 {
-    struct track_block_t *b;
+    struct track_block *b;
     b = tr->block[s / TRACK_BLOCK_SAMPLES];
     return b->overview[(s % TRACK_BLOCK_SAMPLES) / TRACK_OVERVIEW_RES];
 }
 
 /* Return a pointer to (not value of) the sample data for each channel */
 
-static inline signed short* track_get_sample(struct track_t *tr, int s)
+static inline signed short* track_get_sample(struct track *tr, int s)
 {
-    struct track_block_t *b;
+    struct track_block *b;
     b = tr->block[s / TRACK_BLOCK_SAMPLES];
     return &b->pcm[(s % TRACK_BLOCK_SAMPLES) * TRACK_CHANNELS];
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -23,15 +23,13 @@
 #include <alsa/asoundlib.h>
 
 #include "alsa.h"
-#include "timecoder.h"
-#include "player.h"
 
 
 /* This structure doesn't have corresponding functions to be an
  * abstraction of the ALSA calls; it is merely a container for these
  * variables. */
 
-struct alsa_pcm_t {
+struct alsa_pcm {
     snd_pcm_t *pcm;
 
     struct pollfd *pe;
@@ -43,8 +41,8 @@ struct alsa_pcm_t {
 };
 
 
-struct alsa_t {
-    struct alsa_pcm_t capture, playback;
+struct alsa {
+    struct alsa_pcm capture, playback;
 };
 
 
@@ -54,7 +52,7 @@ static void alsa_error(const char *msg, int r)
 }
 
 
-static int pcm_open(struct alsa_pcm_t *alsa, const char *device_name,
+static int pcm_open(struct alsa_pcm *alsa, const char *device_name,
                     snd_pcm_stream_t stream, int rate, int buffer_time)
 {
     int r, dir;
@@ -156,7 +154,7 @@ static int pcm_open(struct alsa_pcm_t *alsa, const char *device_name,
 }
 
 
-static void pcm_close(struct alsa_pcm_t *alsa)
+static void pcm_close(struct alsa_pcm *alsa)
 {
     if (snd_pcm_close(alsa->pcm) < 0)
         abort();
@@ -164,7 +162,7 @@ static void pcm_close(struct alsa_pcm_t *alsa)
 }
 
 
-static ssize_t pcm_pollfds(struct alsa_pcm_t *alsa, struct pollfd *pe,
+static ssize_t pcm_pollfds(struct alsa_pcm *alsa, struct pollfd *pe,
 			   size_t z)
 {
     int r, count;
@@ -189,7 +187,7 @@ static ssize_t pcm_pollfds(struct alsa_pcm_t *alsa, struct pollfd *pe,
 }
 
 
-static int pcm_revents(struct alsa_pcm_t *alsa, unsigned short *revents) {
+static int pcm_revents(struct alsa_pcm *alsa, unsigned short *revents) {
     int r;
 
     r = snd_pcm_poll_descriptors_revents(alsa->pcm, alsa->pe, alsa->pe_count,
@@ -206,9 +204,9 @@ static int pcm_revents(struct alsa_pcm_t *alsa, unsigned short *revents) {
 
 /* Start the audio device capture and playback */
 
-static void start(struct device_t *dv)
+static void start(struct device *dv)
 {
-    struct alsa_t *alsa = (struct alsa_t*)dv->local;
+    struct alsa *alsa = (struct alsa*)dv->local;
 
     if (snd_pcm_start(alsa->capture.pcm) < 0)
         abort();
@@ -218,10 +216,10 @@ static void start(struct device_t *dv)
 /* Register this device's interest in a set of pollfd file
  * descriptors */
 
-static ssize_t pollfds(struct device_t *dv, struct pollfd *pe, size_t z)
+static ssize_t pollfds(struct device *dv, struct pollfd *pe, size_t z)
 {
     int total, r;
-    struct alsa_t *alsa = (struct alsa_t*)dv->local;
+    struct alsa *alsa = (struct alsa*)dv->local;
 
     total = 0;
 
@@ -246,18 +244,12 @@ static ssize_t pollfds(struct device_t *dv, struct pollfd *pe, size_t z)
 /* Collect audio from the player and push it into the device's buffer,
  * for playback */
 
-static int playback(struct device_t *dv)
+static int playback(struct device *dv)
 {
     int r;
-    struct alsa_t *alsa = (struct alsa_t*)dv->local;
+    struct alsa *alsa = (struct alsa*)dv->local;
 
-    if (dv->player) {
-        player_collect(dv->player, alsa->playback.buf,
-                       alsa->playback.period, alsa->playback.rate);
-    } else {
-        memset(alsa->playback.buf, 0,
-               alsa->playback.period * DEVICE_CHANNELS * sizeof(short));
-    }    
+    device_collect(dv, alsa->playback.buf, alsa->playback.period);
 
     r = snd_pcm_writei(alsa->playback.pcm, alsa->playback.buf,
                        alsa->playback.period);
@@ -276,10 +268,10 @@ static int playback(struct device_t *dv)
 /* Pull audio from the device's buffer for capture, and pass it
  * through to the timecoder */
 
-static int capture(struct device_t *dv)
+static int capture(struct device *dv)
 {
     int r;
-    struct alsa_t *alsa = (struct alsa_t*)dv->local;
+    struct alsa *alsa = (struct alsa*)dv->local;
 
     r = snd_pcm_readi(alsa->capture.pcm, alsa->capture.buf,
                       alsa->capture.period);
@@ -290,9 +282,8 @@ static int capture(struct device_t *dv)
         fprintf(stderr, "alsa: capture underrun %d/%ld.\n",
                 r, alsa->capture.period);
     }
-    
-    if (dv->timecoder)
-        timecoder_submit(dv->timecoder, alsa->capture.buf, r);
+
+    device_submit(dv, alsa->capture.buf, r);
 
     return 0;
 }
@@ -301,11 +292,11 @@ static int capture(struct device_t *dv)
 /* After poll() has returned, instruct a device to do all it can at
  * the present time. Return zero if success, otherwise -1 */
 
-static int handle(struct device_t *dv)
+static int handle(struct device *dv)
 {
     int r;
     unsigned short revents;
-    struct alsa_t *alsa = (struct alsa_t*)dv->local;
+    struct alsa *alsa = (struct alsa*)dv->local;
 
     /* Check input buffer for timecode capture */
     
@@ -372,9 +363,9 @@ static int handle(struct device_t *dv)
 }
 
 
-static unsigned int sample_rate(struct device_t *dv)
+static unsigned int sample_rate(struct device *dv)
 {
-    struct alsa_t *alsa = (struct alsa_t*)dv->local;
+    struct alsa *alsa = (struct alsa*)dv->local;
 
     return alsa->capture.rate;
 }
@@ -382,9 +373,9 @@ static unsigned int sample_rate(struct device_t *dv)
 
 /* Close ALSA device and clear any allocations */
 
-static void clear(struct device_t *dv)
+static void clear(struct device *dv)
 {
-    struct alsa_t *alsa = (struct alsa_t*)dv->local;
+    struct alsa *alsa = (struct alsa*)dv->local;
 
     pcm_close(&alsa->capture);
     pcm_close(&alsa->playback);
@@ -392,24 +383,23 @@ static void clear(struct device_t *dv)
 }
 
 
-static struct device_type_t alsa_type = {
+static struct device_ops alsa_ops = {
     .pollfds = pollfds,
     .handle = handle,
     .sample_rate = sample_rate,
     .start = start,
-    .stop = NULL,
     .clear = clear
 };
 
 
 /* Open ALSA device. Do not operate on audio until device_start() */
 
-int alsa_init(struct device_t *dv, const char *device_name,
+int alsa_init(struct device *dv, const char *device_name,
               int rate, int buffer_time)
 {
-    struct alsa_t *alsa;
+    struct alsa *alsa;
 
-    alsa = malloc(sizeof(struct alsa_t));
+    alsa = malloc(sizeof(struct alsa));
     if (!alsa) {
         perror("malloc");
         return -1;
@@ -430,7 +420,7 @@ int alsa_init(struct device_t *dv, const char *device_name,
     }
 
     dv->local = alsa;
-    dv->type = &alsa_type;
+    dv->ops = &alsa_ops;
 
     return 0;
 
@@ -439,4 +429,17 @@ int alsa_init(struct device_t *dv, const char *device_name,
  fail:
     free(alsa);
     return -1;
+}
+
+
+/* ALSA caches information when devices are open. Provide a call
+ * to clear these caches so that valgrind output is clean. */
+
+void alsa_clear_config_cache(void)
+{
+    int r;
+
+    r = snd_config_update_free_global();
+    if (r < 0)
+        alsa_error("config_update_free_global", r);
 }

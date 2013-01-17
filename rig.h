@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Mark Hills <mark@pogo.org.uk>
+ * Copyright (C) 2012 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -20,25 +20,18 @@
 #ifndef RIG_H
 #define RIG_H
 
-#include <stdbool.h>
+#include "track.h"
 
-#define MAX_TRACKS 3
+int rig_init();
+void rig_clear();
 
-struct rig_t {
-    int event[2]; /* pipe to wake up service thread */
+int rig_main();
 
-    size_t ntrack;
-    struct track_t *track[MAX_TRACKS];
-};
+int rig_quit();
 
-int rig_init(struct rig_t *rig);
-void rig_clear(struct rig_t *rig);
+void rig_lock();
+void rig_unlock();
 
-void rig_add_track(struct rig_t *rig, struct track_t *track);
-
-int rig_main(struct rig_t *rig);
-
-int rig_awaken(struct rig_t *rig);
-int rig_quit(struct rig_t *rig);
+void rig_post_track(struct track *t);
 
 #endif
