@@ -9,6 +9,8 @@ Build-Depends:
  libsdl-ttf2.0-dev
 Standards-Version: 3.9.3
 Homepage: http://www.xwax.co.uk/
+Vcs-Git: git://anonscm.debian.org/pkg-multimedia/xwax.git
+Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-multimedia/xwax.git
 
 Package: xwax
 Architecture: any
