@@ -1,3 +1,9 @@
+xwax (1.4-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Alessio Treglia <alessio@debian.org>  Sun, 30 Jun 2013 03:42:07 +0100
+
 xwax (1.3-1) unstable; urgency=low
 
   [ Mitchell Smith ]
