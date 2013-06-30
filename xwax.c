@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2013 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -56,7 +56,7 @@
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(*x))
 
 char *banner = "xwax " VERSION \
-    " (C) Copyright 2012 Mark Hills <mark@xwax.org>";
+    " (C) Copyright 2013 Mark Hills <mark@xwax.org>";
 
 size_t ndeck;
 struct deck deck[3];
@@ -68,7 +68,7 @@ static void usage(FILE *fd)
     fprintf(fd, "Program-wide options:\n"
       "  -k             Lock real-time memory into RAM\n"
       "  -q <n>         Real-time priority (0 for no priority, default %d)\n"
-      "  -g <n>x<n>     Set display geometry\n"
+      "  -g <s>         Set display geometry (see man page)\n"
       "  -h             Display this message to stdout and exit\n\n",
       DEFAULT_PRIORITY);
 
@@ -83,6 +83,8 @@ static void usage(FILE *fd)
       "  -45            Use timecode at 45RPM\n"
       "  -c             Protect against certain operations while playing\n"
       "  -u             Allow all operations when playing\n"
+      "  --line         Line level signal (default)\n"
+      "  --phono        Tolerate cartridge level signal ('software pre-amp')\n"
       "  -i <program>   Importer (default '%s')\n\n",
       DEFAULT_IMPORTER);
 
@@ -110,7 +112,7 @@ static void usage(FILE *fd)
 
 #ifdef WITH_ALSA
     fprintf(fd, "MIDI control:\n"
-      "  -dicer <dev>   Novation Dicer\n\n");
+      "  --dicer <dev>   Novation Dicer\n\n");
 #endif
 
     fprintf(fd,
@@ -125,13 +127,13 @@ static void usage(FILE *fd)
 
 int main(int argc, char *argv[])
 {
-    int r, n, priority;
+    int rc = -1, n, priority;
     const char *importer, *scanner, *geo;
     char *endptr;
     size_t nctl;
     double speed;
     struct timecode_def *timecode;
-    bool protect, use_mlock;
+    bool protect, use_mlock, phono;
 
     struct controller ctl[2];
     struct rt rt;
@@ -168,6 +170,7 @@ int main(int argc, char *argv[])
     timecode = NULL;
     speed = 1.0;
     protect = false;
+    phono = false;
     use_mlock = false;
 
 #if defined WITH_OSS || WITH_ALSA
@@ -284,6 +287,7 @@ int main(int argc, char *argv[])
         } else if (!strcmp(argv[0], "-d") || !strcmp(argv[0], "-a") ||
 		  !strcmp(argv[0], "-j"))
 	{
+            int r;
             unsigned int sample_rate;
             struct deck *ld;
             struct device *device;
@@ -348,7 +352,7 @@ int main(int argc, char *argv[])
                 assert(timecode != NULL);
             }
 
-            timecoder_init(timecoder, timecode, speed, sample_rate);
+            timecoder_init(timecoder, timecode, speed, sample_rate, phono);
 
             /* Connect up the elements to make an operational deck */
 
@@ -408,6 +412,20 @@ int main(int argc, char *argv[])
         } else if (!strcmp(argv[0], "-u")) {
 
             protect = false;
+
+            argv++;
+            argc--;
+
+        } else if (!strcmp(argv[0], "--line")) {
+
+            phono = false;
+
+            argv++;
+            argc--;
+
+        } else if (!strcmp(argv[0], "--phono")) {
+
+            phono = true;
 
             argv++;
             argc--;
@@ -501,7 +519,7 @@ int main(int argc, char *argv[])
             argc -= 2;
 
 #ifdef WITH_ALSA
-        } else if (!strcmp(argv[0], "-dicer")) {
+        } else if (!strcmp(argv[0], "--dicer")) {
 
             struct controller *c;
 
@@ -542,30 +560,38 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    /* FIXME: move this to controller for proper error recovery */
+
     for (n = 0; n < nctl; n++) {
         if (rt_add_controller(&rt, &ctl[n]) == -1)
             return -1;
     }
 
-    /* Order is important: launch realtime thread first, then mlock */
+    rc = EXIT_FAILURE; /* until clean exit */
+
+    /* Order is important: launch realtime thread first, then mlock.
+     * Don't mlock the interface, use sparingly for audio threads */
 
     if (rt_start(&rt, priority) == -1)
         return -1;
 
     if (use_mlock && mlockall(MCL_CURRENT) == -1) {
         perror("mlockall");
-        return -1;
+        goto out_rt;
     }
 
     if (interface_start(&library, geo) == -1)
-        return -1;
+        goto out_rt;
 
     if (rig_main() == -1)
-        return -1;
+        goto out_interface;
 
+    rc = EXIT_SUCCESS;
     fprintf(stderr, "Exiting cleanly...\n");
 
+out_interface:
     interface_stop();
+out_rt:
     rt_stop(&rt);
 
     for (n = 0; n < ndeck; n++)
@@ -580,7 +606,8 @@ int main(int argc, char *argv[])
     rig_clear();
     thread_global_clear();
 
-    fprintf(stderr, "Done.\n");
+    if (rc == EXIT_SUCCESS)
+        fprintf(stderr, "Done.\n");
 
-    return 0;
+    return rc;
 }

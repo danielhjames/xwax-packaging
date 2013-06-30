@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2013 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -452,7 +452,7 @@ static void stop_import(struct track *t)
     } else {
         fprintf(stderr, "Track import completed with status %d\n", status);
         if (!t->terminated)
-            status_printf(STATUS_ERROR, "Error importing %s", t->path);
+            status_printf(STATUS_ALERT, "Error importing %s", t->path);
     }
 
     t->pid = 0;

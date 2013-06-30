@@ -57,6 +57,21 @@ of the
 option, and is the default.
 
 .TP
+.B \-\-phono
+Adjust the noise thresholds of subsequent decks to tolerate a
+cartridge-level signal connected to a line-level audio interface. This
+is a 'software pre-amp'. Unless your audio path has low noise, this
+will give worse results or may not work at all; a true phono
+pre-amplifier is always preferred.
+
+.TP
+.B \-\-line
+Set noise thresholds of subsequent decks to standard audio levels.
+This reverses the effect of the
+.B \-\-phono
+option, and is the default.
+
+.TP
 .B \-i \fIpath\fR
 Use the given importer executable for subsequent decks.
 
@@ -78,9 +93,13 @@ Change the real-time priority of the process. A priority of 0 gives
 the process no priority, and is used for testing only.
 
 .TP
-.B \-g \fIn\fRx\fIn\fR[+\fIn\fR+\fIn\fR]
-Change the geometry of the display. This size and position is passed
+.B \-g [\fIn\fRx\fIn\fR][+\fIn\fR+\fIn\fR][/\fIf\fR]
+Change the geometry of the display in size, position and scale (zoom)
+respectively.
+The size and position is passed
 to SDL, which may use it to set the display mode, or size of an X window.
+See the
+.B EXAMPLES.
 
 .TP
 .B \-h
@@ -148,7 +167,7 @@ The following options are available only when xwax is compiled
 with ALSA support.
 
 .TP
-.B \-dicer \fIdevice\fR
+.B \-\-dicer \fIdevice\fR
 Use one or two Dicer controllers connected as the given ALSA device
 (eg. hw:Dicer). See the section
 .B NOVATION DICER CONTROLS
@@ -312,6 +331,13 @@ Control two decks with Dicer hardware:
 .sp
 .RS
 xwax \-dicer hw:Dicer \-a hw:0 \-a hw:1
+.RE
+
+.P
+Use a high resolution and enlarge the user interface:
+.sp
+.RS
+xwax -g 1920x1200/1.8 -a hw:0
 .RE
 
 .SH HOMEPAGE

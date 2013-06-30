@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2013 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -329,7 +329,7 @@ int jack_init(struct device *dv, const char *name)
             return -1;
     }
 
-    jack = malloc(sizeof(struct jack));
+    jack = malloc(sizeof *jack);
     if (jack == NULL) {
         perror("malloc");
         return -1;
@@ -339,8 +339,8 @@ int jack_init(struct device *dv, const char *name)
     if (register_ports(jack, name) == -1)
         goto fail;
 
+    device_init(dv, &jack_ops);
     dv->local = jack;
-    dv->ops = &jack_ops;
 
     assert(ndeck < sizeof device);
     device[ndeck] = dv;

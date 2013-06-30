@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2013 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -33,6 +33,7 @@
 #include <SDL_ttf.h>
 
 #include "interface.h"
+#include "layout.h"
 #include "player.h"
 #include "rig.h"
 #include "selector.h"
@@ -66,10 +67,16 @@
 #define DETAIL_FONT_SIZE 9
 #define DETAIL_FONT_SPACE 12
 
-/* Screen dimensions */
+/* Screen size (pixels) */
 
 #define DEFAULT_WIDTH 960
 #define DEFAULT_HEIGHT 720
+
+/* Relationship between pixels and screen units */
+
+#define DEFAULT_SCALE 1.0
+
+/* Dimensions in our own screen units */
 
 #define BORDER 12
 #define SPACER 8
@@ -91,7 +98,7 @@
 #define STATUS_HEIGHT (DETAIL_FONT_SPACE)
 
 #define BPM_WIDTH 32
-#define SORT_WIDTH 22
+#define SORT_WIDTH 21
 #define RESULTS_ARTIST_WIDTH 200
 
 #define TOKEN_SPACE 2
@@ -143,7 +150,7 @@ static TTF_Font *clock_font, *deci_font, *detail_font,
 
 static SDL_Color background_col = {0, 0, 0, 255},
     text_col = {224, 224, 224, 255},
-    warn_col = {192, 64, 0, 255},
+    alert_col = {192, 64, 0, 255},
     ok_col = {32, 128, 3, 255},
     elapsed_col = {0, 32, 255, 255},
     cursor_col = {192, 0, 0, 255},
@@ -153,113 +160,25 @@ static SDL_Color background_col = {0, 0, 0, 255},
     artist_col = {16, 64, 0, 255},
     bpm_col = {64, 16, 0, 255};
 
-static int spinner_angle[SPINNER_SIZE * SPINNER_SIZE];
+static unsigned short *spinner_angle, spinner_size;
 
 static int width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT,
     meter_scale = DEFAULT_METER_SCALE;
+static float scale = DEFAULT_SCALE;
 static pthread_t ph;
 static struct selector selector;
 
-struct rect {
-    signed short x, y, w, h;
-};
-
 /*
- * Split the given rectangle split v pixels from the top, with a gap
- * of 'space' between the output rectangles
+ * Scale a dimension according to the current zoom level
  *
- * Post: upper and lower are set
+ * FIXME: This function is used where a rendering does not
+ * acknowledge the scale given in the local rectangle.
+ * These cases should be removed.
  */
 
-static void split_top(const struct rect *source, struct rect *upper,
-                      struct rect *lower, int v, int space)
+static int zoom(int d)
 {
-    int u;
-
-    u = v + space;
-
-    if (upper) {
-        upper->x = source->x;
-        upper->y = source->y;
-        upper->w = source->w;
-        upper->h = v;
-    }
-
-    if (lower) {
-        lower->x = source->x;
-        lower->y = source->y + u;
-        lower->w = source->w;
-        lower->h = source->h - u;
-    }
-}
-
-/*
- * As above, x pixels from the bottom
- */
-
-static void split_bottom(const struct rect *source, struct rect *upper,
-                         struct rect *lower, int v, int space)
-{
-    split_top(source, upper, lower, source->h - v - space, space);
-}
-
-/*
- * As above, v pixels from the left
- */
-
-static void split_left(const struct rect *source, struct rect *left,
-                       struct rect *right, int v, int space)
-{
-    int u;
-
-    u = v + space;
-
-    if (left) {
-        left->x = source->x;
-        left->y = source->y;
-        left->w = v;
-        left->h = source->h;
-    }
-
-    if (right) {
-        right->x = source->x + u;
-        right->y = source->y;
-        right->w = source->w - u;
-        right->h = source->h;
-    }
-}
-
-/*
- * As above, v pixels from the right
- */
-
-static void split_right(const struct rect *source, struct rect *left,
-                        struct rect *right, int v, int space)
-{
-    split_left(source, left, right, source->w - v - space, space);
-}
-
-/*
- * Shrink a rectangle to leave a small border of standard size
- */
-
-static void shrink(const struct rect *in, struct rect *out)
-{
-    if (TOKEN_SPACE * 2 >= in->w) {
-        out->x = in->x;
-        out->w = in->w;
-    } else {
-        out->x = in->x + TOKEN_SPACE;
-        out->w = in->w - TOKEN_SPACE * 2;
-    }
-
-    if (TOKEN_SPACE * 2 >= in->h) {
-        out->y = in->y;
-        out->h = in->h;
-    } else {
-        out->y = in->y + TOKEN_SPACE;
-        out->h = in->h - TOKEN_SPACE * 2;
-    }
+    return d * scale;
 }
 
 /*
@@ -293,7 +212,7 @@ static void time_to_clock(char *buf, char *deci, int t)
  * relative to the centre of the spinner
  */
 
-static void calculate_spinner_lookup(int *angle, int *distance, int size)
+static void calculate_angle_lut(unsigned short *lut, int size)
 {
     int r, c, nr, nc;
     float theta, rat;
@@ -327,13 +246,28 @@ static void calculate_spinner_lookup(int *angle, int *distance, int size)
             /* The angles stored in the lookup table range from 0 to
              * 1023 (where 1024 is 360 degrees) */
 
-            angle[r * size + c]
+            lut[r * size + c]
                 = ((int)(theta * 1024 / (M_PI * 2)) + 1024) % 1024;
-
-            if (distance)
-                distance[r * size + c] = sqrt(SQ(nc) + SQ(nr));
         }
     }
+}
+
+static int init_spinner(int size)
+{
+    spinner_angle = malloc(size * size * (sizeof *spinner_angle));
+    if (spinner_angle == NULL) {
+        perror("malloc");
+        return -1;
+    }
+
+    calculate_angle_lut(spinner_angle, size);
+    spinner_size = size;
+    return 0;
+}
+
+static void clear_spinner(void)
+{
+    free(spinner_angle);
 }
 
 /*
@@ -347,11 +281,13 @@ static void calculate_spinner_lookup(int *angle, int *distance, int size)
  */
 
 static TTF_Font* open_font(const char *name, int size) {
-    int r;
+    int r, pt;
     char buf[256];
     const char **dir;
     struct stat st;
     TTF_Font *font;
+
+    pt = zoom(size);
 
     dir = &font_dirs[0];
 
@@ -362,14 +298,11 @@ static TTF_Font* open_font(const char *name, int size) {
         r = stat(buf, &st);
 
         if (r != -1) { /* something exists at this path */
-            fprintf(stderr, "Loading font '%s', %dpt...\n", buf, size);
+            fprintf(stderr, "Loading font '%s', %dpt...\n", buf, pt);
 
-            font = TTF_OpenFont(buf, size);
-            if (!font) {
-                fputs("Font error: ", stderr);
-                fputs(TTF_GetError(), stderr);
-                fputc('\n', stderr);
-            }
+            font = TTF_OpenFont(buf, pt);
+            if (!font)
+                fprintf(stderr, "Font error: %s\n", TTF_GetError());
             return font; /* or NULL */
         }
 
@@ -506,6 +439,18 @@ static int draw_text(SDL_Surface *sf, const struct rect *rect,
 }
 
 /*
+ * Given a rectangle and font, calculate rendering bounds
+ * for another font so that the baseline matches.
+ */
+
+static void track_baseline(const struct rect *rect, const TTF_Font *a,
+                           struct rect *aligned, const TTF_Font *b)
+{
+    split(*rect, pixels(from_top(TTF_FontAscent(a)  - TTF_FontAscent(b), 0)),
+          NULL, aligned);
+}
+
+/*
  * Draw a coloured rectangle
  */
 
@@ -532,7 +477,7 @@ static void draw_token(SDL_Surface *surface, const struct rect *rect,
     struct rect b;
 
     draw_rect(surface, rect, bg_col);
-    shrink(rect, &b);
+    b = shrink(*rect, TOKEN_SPACE);
     draw_text(surface, &b, buf, detail_font, text_col, col);
 }
 
@@ -663,17 +608,17 @@ static void draw_record(SDL_Surface *surface, const struct rect *rect,
 {
     struct rect artist, title, left, right;
 
-    split_top(rect, &artist, &title, BIG_FONT_SPACE, 0);
+    split(*rect, from_top(BIG_FONT_SPACE, 0), &artist, &title);
     draw_text(surface, &artist, record->artist,
               big_font, text_col, background_col);
 
     /* Layout changes slightly if BPM is known */
 
     if (show_bpm(record->bpm)) {
-        split_left(&title, &left, &right, BPM_WIDTH, 0);
+        split(title, from_left(BPM_WIDTH, 0), &left, &right);
         draw_bpm(surface, &left, record->bpm, background_col);
 
-        split_left(&right, &left, &title, HALF_SPACER, 0);
+        split(right, from_left(HALF_SPACER, 0), &left, &title);
         draw_rect(surface, &left, background_col);
     }
 
@@ -689,19 +634,14 @@ static void draw_clock(SDL_Surface *surface, const struct rect *rect, int t,
 {
     char hms[8], deci[8];
     short int v;
-    int offset;
     struct rect sr;
 
     time_to_clock(hms, deci, t);
 
     v = draw_text(surface, rect, hms, clock_font, col, background_col);
 
-    offset = CLOCK_FONT_SIZE - DECI_FONT_SIZE * 1.04;
-
-    sr.x = rect->x + v;
-    sr.y = rect->y + offset;
-    sr.w = rect->w - v;
-    sr.h = rect->h - offset;
+    split(*rect, pixels(from_left(v, 0)), NULL, &sr);
+    track_baseline(&sr, clock_font, &sr, deci_font);
 
     draw_text(surface, &sr, deci, deci_font, col, background_col);
 }
@@ -761,22 +701,22 @@ static void draw_spinner(SDL_Surface *surface, const struct rect *rect,
     rangle = (int)(player_get_position(pl) * 1024 * rps) % 1024;
 
     if (elapsed < 0 || remain < 0)
-        col = warn_col;
+        col = alert_col;
     else
         col = ok_col;
 
-    for (r = 0; r < SPINNER_SIZE; r++) {
+    for (r = 0; r < spinner_size; r++) {
 
         /* Store a pointer to this row of the framebuffer */
 
         rp = surface->pixels + (y + r) * surface->pitch;
 
-        for (c = 0; c < SPINNER_SIZE; c++) {
+        for (c = 0; c < spinner_size; c++) {
 
             /* Use the lookup table to provide the angle at each
              * pixel */
 
-            pangle = spinner_angle[r * SPINNER_SIZE + c];
+            pangle = spinner_angle[r * spinner_size + c];
 
             /* Calculate the final pixel location and set it */
 
@@ -806,13 +746,13 @@ static void draw_deck_clocks(SDL_Surface *surface, const struct rect *rect,
     struct rect upper, lower;
     SDL_Color col;
 
-    split_top(rect, &upper, &lower, CLOCK_FONT_SIZE, 0);
+    split(*rect, from_top(CLOCK_FONT_SIZE, 0), &upper, &lower);
 
     elapse = player_get_elapsed(pl) * 1000;
     remain = player_get_remain(pl) * 1000;
 
     if (elapse < 0)
-        col = warn_col;
+        col = alert_col;
     else if (remain > 0)
         col = ok_col;
     else
@@ -821,7 +761,7 @@ static void draw_deck_clocks(SDL_Surface *surface, const struct rect *rect,
     draw_clock(surface, &upper, elapse, col);
 
     if (remain <= 0)
-        col = warn_col;
+        col = alert_col;
     else
         col = text_col;
 
@@ -878,7 +818,7 @@ static void draw_overview(SDL_Surface *surface, const struct rect *rect,
             col = needle_col;
             fade = 1;
         } else if (position > tr->length - tr->rate * METER_WARNING_TIME) {
-            col = warn_col;
+            col = alert_col;
             fade = 3;
         } else {
             col = elapsed_col;
@@ -994,7 +934,7 @@ static void draw_meters(SDL_Surface *surface, const struct rect *rect,
 {
     struct rect overview, closeup;
 
-    split_top(rect, &overview, &closeup, OVERVIEW_HEIGHT, SPACER);
+    split(*rect, from_top(OVERVIEW_HEIGHT, SPACER), &overview, &closeup);
 
     if (closeup.h > OVERVIEW_HEIGHT)
         draw_overview(surface, &overview, tr, position);
@@ -1013,7 +953,7 @@ static void draw_deck_top(SDL_Surface *surface, const struct rect *rect,
 {
     struct rect clocks, left, right, spinner, scope;
 
-    split_left(rect, &clocks, &right, CLOCKS_WIDTH, SPACER);
+    split(*rect, from_left(CLOCKS_WIDTH, SPACER), &clocks, &right);
 
     /* If there is no timecoder to display information on, or not enough
      * available space, just draw clocks which span the overall space */
@@ -1025,16 +965,16 @@ static void draw_deck_top(SDL_Surface *surface, const struct rect *rect,
 
     draw_deck_clocks(surface, &clocks, pl, track);
 
-    split_right(&right, &left, &spinner, SPINNER_SIZE, SPACER);
+    split(right, from_right(SPINNER_SIZE, SPACER), &left, &spinner);
     if (left.w < 0)
         return;
-    split_bottom(&spinner, NULL, &spinner, SPINNER_SIZE, 0);
+    split(spinner, from_bottom(SPINNER_SIZE, 0), NULL, &spinner);
     draw_spinner(surface, &spinner, pl);
 
-    split_right(&left, &clocks, &scope, SCOPE_SIZE, SPACER);
+    split(left, from_right(SCOPE_SIZE, SPACER), &clocks, &scope);
     if (clocks.w < 0)
         return;
-    split_bottom(&scope, NULL, &scope, SCOPE_SIZE, 0);
+    split(scope, from_bottom(SCOPE_SIZE, 0), NULL, &scope);
     draw_scope(surface, &scope, pl->timecoder);
 }
 
@@ -1090,19 +1030,19 @@ static void draw_deck(SDL_Surface *surface, const struct rect *rect,
 
     position = player_get_elapsed(pl) * t->rate;
 
-    split_top(rect, &track, &rest, FONT_SPACE + BIG_FONT_SPACE, 0);
+    split(*rect, from_top(FONT_SPACE + BIG_FONT_SPACE, 0), &track, &rest);
     if (rest.h < 160)
         rest = *rect;
     else
         draw_record(surface, &track, deck->record);
 
-    split_top(&rest, &top, &lower, CLOCK_FONT_SIZE * 2, SPACER);
+    split(rest, from_top(CLOCK_FONT_SIZE * 2, SPACER), &top, &lower);
     if (lower.h < 64)
         lower = rest;
     else
         draw_deck_top(surface, &top, pl, t);
 
-    split_bottom(&lower, &meters, &status, FONT_SPACE, SPACER);
+    split(lower, from_bottom(FONT_SPACE, SPACER), &meters, &status);
     if (meters.h < 64)
         meters = lower;
     else
@@ -1118,17 +1058,14 @@ static void draw_deck(SDL_Surface *surface, const struct rect *rect,
 static void draw_decks(SDL_Surface *surface, const struct rect *rect,
                        struct deck deck[], size_t ndecks, int meter_scale)
 {
-    int d, deck_width;
-    struct rect single;
+    int d;
+    struct rect left, right;
 
-    deck_width = (rect->w - BORDER * (ndecks - 1)) / ndecks;
-
-    single = *rect;
-    single.w = deck_width;
+    right = *rect;
 
     for (d = 0; d < ndecks; d++) {
-        single.x = rect->x + (deck_width + BORDER) * d;
-        draw_deck(surface, &single, &deck[d], meter_scale);
+        split(right, columns(d, ndecks, BORDER), &left, &right);
+        draw_deck(surface, &left, &deck[d], meter_scale);
     }
 }
 
@@ -1138,10 +1075,20 @@ static void draw_decks(SDL_Surface *surface, const struct rect *rect,
 
 static void draw_status(SDL_Surface *sf, const struct rect *rect)
 {
-    if (status_level() >= STATUS_ERROR)
-        draw_text(sf, rect, status(), detail_font, text_col, dim(warn_col, 2));
-    else
-        draw_text(sf, rect, status(), detail_font, detail_col, background_col);
+    SDL_Color fg, bg;
+
+    switch (status_level()) {
+    case STATUS_ALERT:
+    case STATUS_WARN:
+        fg = text_col;
+        bg = dim(alert_col, 2);
+        break;
+    default:
+        fg = detail_col;
+        bg = background_col;
+    }
+
+    draw_text(sf, rect, status(), detail_font, fg, bg);
 }
 
 /*
@@ -1157,7 +1104,7 @@ static void draw_search(SDL_Surface *surface, const struct rect *rect,
     SDL_Rect cursor;
     struct rect rtext;
 
-    split_left(rect, NULL, &rtext, SCROLLBAR_SIZE, SPACER);
+    split(*rect, from_left(SCROLLBAR_SIZE, SPACER), NULL, &rtext);
 
     if (sel->search[0] != '\0')
         buf = sel->search;
@@ -1168,7 +1115,7 @@ static void draw_search(SDL_Surface *surface, const struct rect *rect,
 
     cursor.x = rtext.x + s;
     cursor.y = rtext.y;
-    cursor.w = CURSOR_WIDTH;
+    cursor.w = CURSOR_WIDTH * rect->scale; /* FIXME: use proper UI funcs */
     cursor.h = rtext.h;
 
     SDL_FillRect(surface, &cursor, palette(surface, &cursor_col));
@@ -1228,7 +1175,7 @@ static void draw_crates(SDL_Surface *surface, const struct rect *rect,
     size_t n;
     struct rect left, bottom;
 
-    split_left(rect, &left, &bottom, SCROLLBAR_SIZE, SPACER);
+    split(*rect, from_left(SCROLLBAR_SIZE, SPACER), &left, &bottom);
     draw_scroll_bar(surface, &left, scroll);
 
     n = scroll->offset;
@@ -1236,17 +1183,18 @@ static void draw_crates(SDL_Surface *surface, const struct rect *rect,
     for (;;) {
         bool selected;
         SDL_Color col;
-        struct rect top;
+        struct rect top, remain;
         const struct crate *crate;
 
         if (n >= library->crates)
             break;
 
-        if (bottom.h < FONT_SPACE)
+        split(bottom, from_top(FONT_SPACE, 0), &top, &remain);
+
+        if (remain.h < 0)
             break;
 
-        split_top(&bottom, &top, &bottom, FONT_SPACE, 0);
-
+        bottom = remain;
         crate = library->crate[n];
         selected = (n == scroll->selected);
 
@@ -1257,7 +1205,7 @@ static void draw_crates(SDL_Surface *surface, const struct rect *rect,
         } else {
             struct rect left, right;
 
-            split_right(&top, &left, &right, SORT_WIDTH, 0);
+            split(top, from_right(SORT_WIDTH, 0), &left, &right);
             draw_text(surface, &left, crate->name, font, col, selected_col);
 
             switch (sort) {
@@ -1301,7 +1249,7 @@ static void draw_listing(SDL_Surface *surface, const struct rect *rect,
     int width;
     struct rect left, bottom;
 
-    split_left(rect, &left, &bottom, SCROLLBAR_SIZE, SPACER);
+    split(*rect, from_left(SCROLLBAR_SIZE, SPACER), &left, &bottom);
     draw_scroll_bar(surface, &left, scroll);
 
     /* Choose the width of the 'artist' column */
@@ -1314,18 +1262,19 @@ static void draw_listing(SDL_Surface *surface, const struct rect *rect,
 
     for (;;) {
         SDL_Color col;
-        struct rect top, left, right;
+        struct rect top, left, right, remain;
         const struct record *record;
         bool selected;
 
         if (n >= listing->entries)
             break;
 
-        if (bottom.h < FONT_SPACE)
+        split(bottom, from_top(FONT_SPACE, 0), &top, &remain);
+
+        if (remain.h < 0)
             break;
 
-        split_top(&bottom, &top, &bottom, FONT_SPACE, 0);
-
+        bottom = remain;
         record = listing->record[n];
         selected = (n == scroll->selected);
 
@@ -1335,16 +1284,16 @@ static void draw_listing(SDL_Surface *surface, const struct rect *rect,
             col = background_col;
         }
 
-        split_left(&top, &left, &right, BPM_WIDTH, 0);
+        split(top, from_left(BPM_WIDTH, 0), &left, &right);
         draw_bpm_field(surface, &left, record->bpm, col);
 
-        split_left(&right, &left, &right, SPACER, 0);
+        split(right, from_left(SPACER, 0), &left, &right);
         draw_rect(surface, &left, col);
 
-        split_left(&right, &left, &right, width, 0);
+        split(right, from_left(width, 0), &left, &right);
         draw_text(surface, &left, record->artist, font, text_col, col);
 
-        split_left(&right, &left, &right, SPACER, 0);
+        split(right, from_left(SPACER, 0), &left, &right);
         draw_rect(surface, &left, col);
         draw_text(surface, &right, record->title, font, text_col, col);
 
@@ -1362,16 +1311,14 @@ static void draw_listing(SDL_Surface *surface, const struct rect *rect,
 static void draw_library(SDL_Surface *surface, const struct rect *rect,
                          struct selector *sel)
 {
-    unsigned int lines;
     struct rect rsearch, rlists, rcrates, rrecords;
 
-    split_top(rect, &rsearch, &rlists, SEARCH_HEIGHT, SPACER);
+    split(*rect, from_top(SEARCH_HEIGHT, SPACER), &rsearch, &rlists);
     draw_search(surface, &rsearch, sel);
 
-    lines = rlists.h / FONT_SPACE;
-    selector_set_lines(sel, lines);
+    selector_set_lines(sel, count_rows(rlists, FONT_SPACE));
 
-    split_left(&rlists, &rcrates, &rrecords, (rlists.w / 4), SPACER);
+    split(rlists, columns(0, 4, SPACER), &rcrates, &rrecords);
     if (rcrates.w > LIBRARY_MIN_WIDTH) {
         draw_listing(surface, &rrecords, sel->view_listing, &sel->records);
         draw_crates(surface, &rcrates, sel->library, &sel->crates, sel->sort);
@@ -1520,7 +1467,7 @@ static bool handle_key(SDLKey key, SDLMod mod)
  * Action on size change event on the main window
  */
 
-static SDL_Surface* set_size(int w, int h, struct rect *rect)
+static SDL_Surface* set_size(int w, int h, struct rect *r)
 {
     SDL_Surface *surface;
 
@@ -1530,10 +1477,7 @@ static SDL_Surface* set_size(int w, int h, struct rect *rect)
         return NULL;
     }
 
-    rect->x = BORDER;
-    rect->y = BORDER;
-    rect->w = w - 2 * BORDER;
-    rect->h = h - 2 * BORDER;
+    *r = shrink(rect(0, 0, w, h, scale), BORDER);
 
     fprintf(stderr, "New interface size is %dx%d.\n", w, h);
 
@@ -1663,13 +1607,13 @@ static int interface_main(void)
         /* Split the display into the various areas. If an area is too
          * small, abandon any actions to happen in that area. */
 
-        split_bottom(&rworkspace, &rtmp, &rstatus, STATUS_HEIGHT, SPACER);
+        split(rworkspace, from_bottom(STATUS_HEIGHT, SPACER), &rtmp, &rstatus);
         if (rtmp.h < 128 || rtmp.w < 0) {
             rtmp = rworkspace;
             status_update = false;
         }
 
-        split_top(&rtmp, &rplayers, &rlibrary, PLAYER_HEIGHT, SPACER);
+        split(rtmp, from_top(PLAYER_HEIGHT, SPACER), &rplayers, &rlibrary);
         if (rlibrary.h < LIBRARY_MIN_HEIGHT || rlibrary.w < LIBRARY_MIN_WIDTH) {
             rplayers = rtmp;
             library_update = false;
@@ -1723,27 +1667,49 @@ static void* launch(void *p)
 }
 
 /*
- * Parse and action the given geometry string. Format is "960x720" or
- * "970x720+20+20"
+ * Parse and action the given geometry string
+ *
+ * Geometry string includes size, position and scale. The format is
+ * "[<n>x<n>][+<n>+<n>][@<f>]". Some examples:
+ *
+ *   960x720
+ *   +10+10
+ *   960x720+10+10
+ *   @1.6
+ *   1920x1200@1.6
  *
  * Return: -1 if string could not be actioned, otherwise 0
  */
 
 static int parse_geometry(const char *s)
 {
-    int n, x, y;
+    int n, x, y, len;
     char buf[128];
 
-    n = sscanf(s, "%dx%d+%d+%d", &width, &height, &x, &y);
+    /* The %n in format strings is not a token, see scanf(3) man page */
 
+    n = sscanf(s, "%[0-9]x%d%n", buf, &height, &len);
     switch (n) {
-    case EOF: /* empty string */
+    case EOF:
+        return 0;
+    case 0:
         break;
-
     case 2:
+        /* we used a format to prevent parsing the '+' in the next block */
+        width = atoi(buf);
+        s += len;
         break;
+    default:
+        return -1;
+    }
 
-    case 4:
+    n = sscanf(s, "+%d+%d%n", &x, &y, &len);
+    switch (n) {
+    case EOF:
+        return 0;
+    case 0:
+        break;
+    case 2:
         /* FIXME: Not a desirable way to get geometry information to
          * SDL, but it seems to be the only way */
 
@@ -1751,11 +1717,29 @@ static int parse_geometry(const char *s)
         if (putenv(buf) != 0)
             return -1;
 
+        s += len;
         break;
-
     default:
         return -1;
     }
+
+    n = sscanf(s, "/%f%n", &scale, &len);
+    switch (n) {
+    case EOF:
+        return 0;
+    case 0:
+        break;
+    case 1:
+        if (scale <= 0.0)
+            return -1;
+        s += len;
+        break;
+    default:
+        return -1;
+    }
+
+    if (*s != '\0')
+        return -1;
 
     return 0;
 }
@@ -1777,12 +1761,14 @@ int interface_start(struct library *lib, const char *geo)
     }
 
     for (n = 0; n < ndeck; n++) {
-        if (timecoder_monitor_init(&deck[n].timecoder, SCOPE_SIZE) == -1)
+        if (timecoder_monitor_init(&deck[n].timecoder, zoom(SCOPE_SIZE)) == -1)
             return -1;
     }
 
+    if (init_spinner(zoom(SPINNER_SIZE)) == -1)
+        return -1;
+
     selector_init(&selector, lib);
-    calculate_spinner_lookup(spinner_angle, NULL, SPINNER_SIZE);
     status_notify(status_change);
     status_set(STATUS_VERBOSE, banner);
 
@@ -1835,8 +1821,8 @@ void interface_stop(void)
     for (n = 0; n < ndeck; n++)
         timecoder_monitor_clear(&deck[n].timecoder);
 
+    clear_spinner();
     selector_clear(&selector);
-
     clear_fonts();
 
     TTF_Quit();

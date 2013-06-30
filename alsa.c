@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2013 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -399,8 +399,8 @@ int alsa_init(struct device *dv, const char *device_name,
 {
     struct alsa *alsa;
 
-    alsa = malloc(sizeof(struct alsa));
-    if (!alsa) {
+    alsa = malloc(sizeof *alsa);
+    if (alsa == NULL) {
         perror("malloc");
         return -1;
     }
@@ -419,8 +419,8 @@ int alsa_init(struct device *dv, const char *device_name,
         goto fail_capture;
     }
 
+    device_init(dv, &alsa_ops);
     dv->local = alsa;
-    dv->ops = &alsa_ops;
 
     return 0;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2013 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -27,6 +27,8 @@
 #include "device.h"
 #include "realtime.h"
 #include "thread.h"
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*x))
 
 /*
  * Raise the priority of the current thread
@@ -90,7 +92,7 @@ static void rt_main(struct rt *rt)
                 continue;
             } else {
                 perror("poll");
-                return;
+                abort();
             }
         }
 
@@ -143,7 +145,7 @@ int rt_add_device(struct rt *rt, struct device *dv)
 
     debug("%p adding device %p", rt, dv);
 
-    if (rt->ndv == sizeof rt->dv) {
+    if (rt->ndv == ARRAY_SIZE(rt->dv)) {
         fprintf(stderr, "Too many audio devices\n");
         return -1;
     }
@@ -173,16 +175,24 @@ int rt_add_device(struct rt *rt, struct device *dv)
 
 int rt_add_controller(struct rt *rt, struct controller *c)
 {
+    ssize_t z;
+
     debug("%p adding controller %p", rt, c);
 
-    if (rt->nctl == sizeof rt->ctl) {
+    if (rt->nctl == ARRAY_SIZE(rt->ctl)) {
         fprintf(stderr, "Too many controllers\n");
         return -1;
     }
 
-    /* Controllers don't have poll entries; they are polled every
-     * cycle of the audio */
+    /* Similar to adding a PCM device */
 
+    z = controller_pollfds(c, &rt->pt[rt->npt], sizeof(rt->pt) - rt->npt);
+    if (z == -1) {
+        fprintf(stderr, "Controller failed to return file descriptors.\n");
+        return -1;
+    }
+
+    rt->npt += z;
     rt->ctl[rt->nctl++] = c;
 
     return 0;
