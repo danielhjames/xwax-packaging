@@ -1,4 +1,4 @@
-# Copyright (C) 2012 Mark Hills <mark@xwax.org>
+# Copyright (C) 2013 Mark Hills <mark@xwax.org>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License version 2, as
@@ -39,9 +39,10 @@ DOCDIR ?= $(PREFIX)/share/doc
 
 # Build flags
 
-CFLAGS += -Wall -O3
+CFLAGS ?= -O3
+CFLAGS += -Wall
 CPPFLAGS += -MMD
-LDFLAGS += -O3
+LDFLAGS ?= -O3
 
 # Core objects and libraries
 
@@ -52,7 +53,8 @@ OBJS = controller.o cues.o deck.o device.o external.o interface.o \
 DEVICE_CPPFLAGS =
 DEVICE_LIBS =
 
-TESTS = test-cues test-library test-status test-timecoder test-track
+TESTS = tests/cues tests/library tests/status tests/timecoder tests/track \
+	tests/ttf
 
 # Optional device types
 
@@ -129,21 +131,27 @@ TAGS:		$(OBJS:.o=.c)
 
 .PHONY:		tests
 tests:		$(TESTS)
+tests:		CPPFLAGS += -I.
 
-test-cues:	test-cues.o cues.o
+tests/cues:	tests/cues.o cues.o
 
-test-library:	test-library.o external.o library.o listing.o
+tests/library:	tests/library.o external.o library.o listing.o
 
-test-midi:	test-midi.o midi.o
-test-midi:	LDLIBS += $(ALSA_LIBS)
+tests/midi:	tests/midi.o midi.o
+tests/midi:	LDLIBS += $(ALSA_LIBS)
 
-test-status:	test-status.o status.o
+tests/status:	tests/status.o status.o
 
-test-timecoder:	test-timecoder.o lut.o timecoder.o
+tests/timecoder:	tests/timecoder.o lut.o timecoder.o
 
-test-track:	test-track.o external.o rig.o status.o thread.o track.o
-test-track:	LDFLAGS += -pthread
-test-track:	LDLIBS += -lm
+tests/track:	tests/track.o external.o rig.o status.o thread.o track.o
+tests/track:	LDFLAGS += -pthread
+tests/track:	LDLIBS += -lm
+
+tests/ttf.o:	tests/ttf.c  # not needed except to workaround Make 3.81
+tests/ttf.o:	CFLAGS += $(SDL_CFLAGS)
+
+tests/ttf:	LDLIBS += $(SDL_LIBS)
 
 .PHONY:		clean
 clean:
