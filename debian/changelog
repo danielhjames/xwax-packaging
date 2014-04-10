@@ -1,3 +1,16 @@
+xwax (1.5-1) unstable; urgency=low
+
+  * New upstream release:
+    - Scan the music library in the background on startup
+    - Function to re-scan a crate
+    - Performance improovement to audio resampler
+    - Additional font paths
+    - Minor bug fixes
+  * Bump Standards.
+  * Add myself to copyright holders for the packaging.
+
+ -- Alessio Treglia <alessio@debian.org>  Thu, 10 Apr 2014 15:19:23 +0100
+
 xwax (1.4-1) unstable; urgency=low
 
   * New upstream release.
