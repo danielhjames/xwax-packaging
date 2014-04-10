@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Mark Hills <mark@xwax.org>
+ * Copyright (C) 2014 Mark Hills <mark@xwax.org>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -57,7 +57,7 @@ int deck_init(struct deck *deck, struct rt *rt)
     deck->record = &no_record;
     deck->punch = NO_PUNCH;
     rate = device_sample_rate(&deck->device);
-    player_init(&deck->player, rate, track_get_empty(), &deck->timecoder);
+    player_init(&deck->player, rate, track_acquire_empty(), &deck->timecoder);
     cues_reset(&deck->cues);
 
     /* The timecoder and player are driven by requests from
@@ -95,7 +95,7 @@ void deck_load(struct deck *deck, struct record *record)
         return;
     }
 
-    t = track_get_by_import(deck->importer, record->pathname);
+    t = track_acquire_by_import(deck->importer, record->pathname);
     if (t == NULL)
         return;
 
