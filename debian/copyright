@@ -8,7 +8,9 @@ Copyright: 2012 Mark Hills <mark@xwax.org>
 License: GPL-2+
 
 Files: debian/*
-Copyright: 2010-2011 Mitchell Smith
+Copyright:
+  2014 Alessio Treglia <alessio@debian.org>
+  2010-2011 Mitchell Smith
 License: GPL-2+
 
 License: GPL-2+
