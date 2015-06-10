@@ -1,3 +1,12 @@
+xwax (1.6~beta1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Support both avconf and ffmpeg binaries. (Closes: #722487)
+  * Refresh debian/copyright.
+  * Bump Standards
+
+ -- Alessio Treglia <alessio@debian.org>  Wed, 10 Jun 2015 12:56:04 +0100
+
 xwax (1.5-1) unstable; urgency=low
 
   * New upstream release:
