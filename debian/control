@@ -23,7 +23,7 @@ Depends:
  ${shlibs:Depends}
 Recommends:
  cdparanoia,
- ffmpeg,
+ libav-tools | ffmpeg,
  mpg123
 Suggests:
  jackd
