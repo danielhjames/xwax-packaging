@@ -4,12 +4,12 @@ Upstream-Contact: mark@pogo.org.uk
 Source: http://xwax.org/releases/
 
 Files: *
-Copyright: 2012 Mark Hills <mark@xwax.org>
+Copyright: 2015 Mark Hills <mark@xwax.org>
 License: GPL-2+
 
 Files: debian/*
 Copyright:
-  2014 Alessio Treglia <alessio@debian.org>
+  2014-2015 Alessio Treglia <alessio@debian.org>
   2010-2011 Mitchell Smith
 License: GPL-2+
 
