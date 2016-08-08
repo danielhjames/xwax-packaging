@@ -1,4 +1,4 @@
-Description: Pick either avconv of ffmpeg.
+Description: Pick either avconv or ffmpeg.
 Author: Alessio Treglia <alessio@debian.org>
 Bug-Debian: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=722487
 Forwarded: no
@@ -12,7 +12,7 @@ Forwarded: no
  FILE="$1"
  RATE="$2"
  
-+g_fallback_tool="$(which avconf || which ffmpeg)"
++g_fallback_tool="$(which avconv || which ffmpeg)"
 +
  case "$FILE" in
  
