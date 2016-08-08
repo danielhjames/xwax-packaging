@@ -18,7 +18,7 @@ Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-multimedia/xwax.git
 Package: xwax
 Architecture: any
 Depends:
- ttf-dejavu-extra,
+ fonts-dejavu-extra,
  ${misc:Depends},
  ${shlibs:Depends}
 Recommends:
