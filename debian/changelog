@@ -1,5 +1,6 @@
-xwax (1.6-beta2-1) unstable; urgency=low
+xwax (1.6~beta2-1.1) unstable; urgency=low
 
+  * Non-maintainer upload
   * New upstream release
   * Fix typo in 'which avconv'
   * Font package name has changed, avoid pulling in transitional package

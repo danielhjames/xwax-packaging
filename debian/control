@@ -6,7 +6,7 @@ Uploaders:
  Alessio Treglia <alessio@debian.org>,
  Mitchell Smith <mjs@mjsprojects.net>
 Build-Depends:
- debhelper (>= 7.0.50~),
+ debhelper (>= 9),
  libasound2-dev [linux-any],
  libjack-dev,
  libsdl-ttf2.0-dev
