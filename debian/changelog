@@ -1,4 +1,4 @@
-xwax (1.6~beta2-1) unstable; urgency=low
+xwax (1.6~beta2-1) UNRELEASED; urgency=medium
 
   * New upstream release
   * Fix typo in 'which avconv'
