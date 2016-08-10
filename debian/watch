@@ -1,3 +1,2 @@
 version=3
-http://www.xwax.co.uk/download.html \
- releases/xwax-([\d\.]*).tar.gz
+https://github.com/xwax/xwax/tags /xwax/xwax/archive/(.+)\.(?:zip|tgz|tbz|txz|(?:tar\.(?:gz|bz2|xz)))
