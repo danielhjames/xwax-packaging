@@ -1,13 +1,13 @@
-xwax (1.6~beta2-1) UNRELEASED; urgency=medium
+xwax (1.6-1) UNRELEASED; urgency=medium
 
   * New upstream release
-  * Fix typo in 'which avconv'
+  * Remove patch that was merged upstream in 1.6 final release
   * Font package name has changed, avoid pulling in transitional package
   * Bump debhelper compatibility version
   * Use https for Vcs fields in control file
   * Update Debian readme with current script name and wiki link
 
- -- Daniel James <daniel@64studio.com>  Tue, 09 Aug 2016 10:52:02 +0100
+ -- Daniel James <daniel@64studio.com>  Mon, 16 Aug 2016 11:19:34 +0100
 
 xwax (1.6~beta1-1) unstable; urgency=medium
 
