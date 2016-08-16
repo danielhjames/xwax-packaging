@@ -18,6 +18,7 @@ export CPPFLAGS:=$(shell dpkg-buildflags --get CPPFLAGS)
 export CFLAGS:=$(shell dpkg-buildflags --get CFLAGS)
 export CXXFLAGS:=$(shell dpkg-buildflags --get CXXFLAGS)
 export LDFLAGS:=$(shell dpkg-buildflags --get LDFLAGS)
+export DEB_BUILD_MAINT_OPTIONS=hardening=+bindnow,-pie
 
 %:
 	dh $@
