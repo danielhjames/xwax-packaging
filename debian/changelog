@@ -6,8 +6,9 @@ xwax (1.6-1) UNRELEASED; urgency=medium
   * Bump debhelper compatibility version
   * Use https for Vcs fields in control file
   * Update Debian readme with current script name and wiki link
+  * Enable all security hardening options
 
- -- Daniel James <daniel@64studio.com>  Mon, 15 Aug 2016 11:19:34 +0100
+ -- Daniel James <daniel@64studio.com>  Mon, 22 Aug 2016 14:25:23 +0100
 
 xwax (1.6~beta1-1) unstable; urgency=medium
 
