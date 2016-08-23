@@ -9,8 +9,9 @@ xwax (1.6-1) UNRELEASED; urgency=medium
   * Enable all security hardening options
   * Enable parallel build
   * Update copyright notice
+  * Improve format of watch file to sort betas correctly
 
- -- Daniel James <daniel@64studio.com>  Tue, 23 Aug 2016 14:14:06 +0100
+ -- Daniel James <daniel@64studio.com>  Tue, 23 Aug 2016 15:00:10 +0100
 
 xwax (1.6~beta1-1) unstable; urgency=medium
 
