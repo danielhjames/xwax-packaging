@@ -7,8 +7,10 @@ xwax (1.6-1) UNRELEASED; urgency=medium
   * Use https for Vcs fields in control file
   * Update Debian readme with current script name and wiki link
   * Enable all security hardening options
+  * Enable parallel build
+  * Update copyright notice
 
- -- Daniel James <daniel@64studio.com>  Mon, 22 Aug 2016 14:25:23 +0100
+ -- Daniel James <daniel@64studio.com>  Tue, 23 Aug 2016 14:14:06 +0100
 
 xwax (1.6~beta1-1) unstable; urgency=medium
 
