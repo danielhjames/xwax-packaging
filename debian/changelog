@@ -1,4 +1,4 @@
-xwax (1.6-1) UNRELEASED; urgency=medium
+xwax (1.6-1) unstable; urgency=medium
 
   * New upstream release
   * Remove patch that was merged upstream in 1.6 final release
@@ -12,7 +12,7 @@ xwax (1.6-1) UNRELEASED; urgency=medium
   * Improve format of watch file to sort betas correctly
   * Add myself to the list of uploaders
 
- -- Daniel James <daniel@64studio.com>  Tue, 23 Aug 2016 15:00:10 +0100
+ -- Daniel James <daniel@64studio.com>  Wed, 31 Aug 2016 15:37:31 +0100
 
 xwax (1.6~beta1-1) unstable; urgency=medium
 
