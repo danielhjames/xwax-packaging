@@ -10,6 +10,7 @@ xwax (1.6-1) UNRELEASED; urgency=medium
   * Enable parallel build
   * Update copyright notice
   * Improve format of watch file to sort betas correctly
+  * Add myself to the list of uploaders
 
  -- Daniel James <daniel@64studio.com>  Tue, 23 Aug 2016 15:00:10 +0100
 
