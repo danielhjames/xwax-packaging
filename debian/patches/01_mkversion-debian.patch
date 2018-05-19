@@ -1,0 +1,28 @@
+Description: Generate .version using dpkg-parsechangelog
+ mkversion currently assumes building from a git repository with upstream tags.
+ This is incorrect in Debian:
+ - When using git, tags will be debian specific (like "debian/<version>-1")
+ - When not using git, git fails to run and no version is generated.
+ .
+ Fix this by patching mkversion to generate the version using
+ dpkg-parsechangelog which will always work during a build.
+Author: James Cowgill <jcowgill@debian.org>
+Forwarded: not-needed
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/mkversion
++++ b/mkversion
+@@ -11,12 +11,7 @@ VF=.version
+ if [ "$1" = "-r" ]; then
+ 	# Refresh the version number, if we can
+ 
+-	VERSION=`git describe 2> /dev/null`
+-	if [ $? -eq 0 ]; then
+-		if ! echo $VERSION | diff - $VF > /dev/null 2>&1; then
+-			echo $VERSION > $VF
+-		fi
+-	fi
++	dpkg-parsechangelog -SVersion | sed 's/-[^-]*$//' | sed 's/^[0-9]*://' > $VF
+ else
+ 	# Output the version number
+ 
